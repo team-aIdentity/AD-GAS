@@ -4,6 +4,7 @@ import React from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { ProviderDirectSigning } from './ProviderDirectSigning';
 import { DebugProviderSigning } from './DebugProviderSigning';
+import { ErrorExplanation } from './ErrorExplanation';
 import { NetworkInfo } from './NetworkInfo';
 
 export function WalletConnector() {
@@ -43,6 +44,7 @@ export function WalletConnector() {
 
         {/* Account Abstraction 송금 컴포넌트 */}
         <div className="w-full space-y-3">
+          <ErrorExplanation />
           <DebugProviderSigning />
           <ProviderDirectSigning address={address!} />
         </div>

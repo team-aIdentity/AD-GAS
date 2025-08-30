@@ -90,7 +90,7 @@ export function formatUserOperationForMetaMask(userOp: any) {
   const domain = {
     name: 'Account Abstraction',
     version: '1',
-    chainId: 137, // 숫자로 전달
+    chainId: 11155111, // 숫자로 전달
     verifyingContract: userOp.sender,
   };
 

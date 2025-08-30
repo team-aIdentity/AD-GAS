@@ -38,7 +38,7 @@ export function DebugProviderSigning() {
       const simpleDomain = {
         name: 'Test App',
         version: '1',
-        chainId: 137,
+        chainId: 11155111,
         verifyingContract: address,
       };
 
@@ -75,11 +75,14 @@ export function DebugProviderSigning() {
       }
 
       // 4단계: UserOperation 형식 테스트
+      // Smart Account 주소 생성 (EOA 주소를 기반으로 한 deterministic 주소)
+      const smartAccountAddress = `0x9406${address.slice(6, 42)}`;
+      
       const userOpDomain = {
         name: 'Account Abstraction',
         version: '1',
-        chainId: 137,
-        verifyingContract: address,
+        chainId: 11155111,
+        verifyingContract: smartAccountAddress, // Smart Account 주소 사용
       };
 
       const userOpTypes = {
@@ -98,7 +101,7 @@ export function DebugProviderSigning() {
       };
 
       const userOpMessage = {
-        sender: address,
+        sender: smartAccountAddress, // Smart Account 주소 사용
         nonce: '0x1',
         initCode: '0x',
         callData:
