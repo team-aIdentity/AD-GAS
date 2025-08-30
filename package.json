@@ -1,0 +1,78 @@
+{
+  "name": "gasless-sdk",
+  "version": "1.0.0",
+  "description": "A comprehensive SDK for gasless transactions and meta-transactions on EVM-compatible blockchains",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write src/**/*.ts",
+    "dev": "ts-node src/index.ts",
+    "prepublishOnly": "npm run build",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "gasless",
+    "meta-transactions",
+    "ethereum",
+    "polygon",
+    "erc-4337",
+    "account-abstraction",
+    "relayer",
+    "paymaster",
+    "blockchain",
+    "web3"
+  ],
+  "author": "Gasless SDK Team",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.13.2",
+    "axios": "^1.7.7",
+    "ws": "^8.18.0",
+    "@ethersproject/experimental": "^5.7.0"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "vue": ">=3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "@types/jest": "^29.5.12",
+    "@types/ws": "^8.5.12",
+    "@types/react": "^18.3.5",
+    "@typescript-eslint/eslint-plugin": "^8.5.0",
+    "@typescript-eslint/parser": "^8.5.0",
+    "eslint": "^9.9.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "jest": "^29.7.0",
+    "prettier": "^3.3.3",
+    "react": "^18.3.1",
+    "rimraf": "^6.0.1",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/gasless-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/gasless-sdk/issues"
+  },
+  "homepage": "https://github.com/your-org/gasless-sdk#readme",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
