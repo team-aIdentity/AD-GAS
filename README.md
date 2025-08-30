@@ -1,122 +1,137 @@
 # Gasless SDK
 
-A comprehensive TypeScript SDK for gasless transactions and meta-transactions on EVM-compatible blockchains.
+A comprehensive TypeScript SDK for gasless transactions using Biconomy's Account Abstraction (EIP-4337). This SDK allows users to execute blockchain transactions without paying for gas fees directly, with the cost sponsored by a dApp.
 
 ## 🚀 Features
 
-- **Gasless Transactions**: Send transactions without holding ETH for gas fees
-- **Meta-Transactions**: EIP-2771 compliant meta-transaction support
-- **Multi-Chain Support**: Ethereum, Polygon, Arbitrum, BSC, and more
-- **ERC-4337 Integration**: Account Abstraction and Paymaster support
-- **Developer Friendly**: TypeScript-first with comprehensive type definitions
-- **Flexible Architecture**: Modular design for easy customization
+- **Gas Sponsorship**: Send transactions where the dApp sponsors the gas fees.
+- **Account Abstraction**: Utilizes EIP-4337 to provide smart contract wallets for users.
+- **Powered by Biconomy**: Built on top of Biconomy's robust AbstractJS and MEE Client for reliable transaction execution.
+- **Multi-Chain Support**: Works with major EVM chains like Polygon, Ethereum, Base, and more.
+- **Flexible Gas Payment**: Pay gas with native tokens or ERC-20 tokens, in addition to sponsorship.
+- **Developer Friendly**: Simple, asynchronous API designed for ease of integration, especially with `viem` and `wagmi`.
 
 ## 📦 Installation
 
 ```bash
-npm install gasless-sdk
+npm install gasless-sdk @biconomy/abstractjs viem
 ```
 
 ## 🔧 Quick Start
 
+This guide shows how to integrate the Gasless SDK into a React application using `wagmi`.
+
+### 1. Prerequisites
+
+Your application must be set up with `wagmi` to provide a `publicClient` and `walletClient`.
+
+### 2. Initialization
+
+Initialize the SDK within your React component once the wallet is connected.
+
 ```typescript
+import { useState, useEffect } from 'react';
+import { usePublicClient, useWalletClient } from 'wagmi';
 import { GaslessSDK } from 'gasless-sdk';
+import { parseEther } from 'viem';
 
-// Initialize the SDK
-const sdk = new GaslessSDK({
-  networks: [
-    {
-      chainId: 137,
-      name: 'Polygon Mainnet',
-      rpcUrl: 'https://polygon-mainnet.g.alchemy.com/v2/your-api-key',
-      gasTokens: ['0x0000000000000000000000000000000000000000'],
+function MyDApp() {
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+  const [sdk, setSdk] = useState<GaslessSDK | null>(null);
+  const [smartAccountAddress, setSmartAccountAddress] = useState<string>('');
+
+  useEffect(() => {
+    const initSDK = async () => {
+      if (publicClient && walletClient) {
+        try {
+          const gaslessSDK = await GaslessSDK.initialize({
+            publicClient,
+            walletClient,
+            apiKey: 'YOUR_BICONOMY_API_KEY', // Get from Biconomy Dashboard
+          });
+          setSdk(gaslessSDK);
+          const address = gaslessSDK.getSmartAccountAddress();
+          setSmartAccountAddress(address || '');
+        } catch (error) {
+          console.error("SDK Initialization failed:", error);
+        }
+      }
+    };
+
+    initSDK();
+  }, [publicClient, walletClient]);
+
+  const handleTransaction = async () => {
+    if (!sdk) {
+      alert("SDK not initialized!");
+      return;
     }
-  ],
-  defaultNetwork: 137,
-  relayerEndpoint: 'https://relayer.example.com',
-  paymasterEndpoint: 'https://paymaster.example.com',
-  debug: true,
-});
+    try {
+      // This will trigger an ad view before proceeding
+      const txHash = await sdk.sendGaslessTransaction({
+        to: '0xRecipientAddress', // Replace with the recipient's address
+        value: parseEther('0.0001'),
+      });
+      console.log('Transaction Hash:', txHash);
+      alert(`Transaction successful! Hash: ${txHash}`);
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      alert(`Transaction failed: ${error.message}`);
+    }
+  };
 
-// Connect wallet
-await sdk.connectWallet(wallet);
-
-// Send a gasless transaction
-const response = await sdk.sendGaslessTransaction({
-  to: '0x...',
-  data: '0x...',
-  value: 0,
-}, (event) => {
-  console.log('Transaction event:', event);
-});
-
-console.log('Transaction hash:', response.transactionHash);
+  return (
+    <div>
+      <h2>Gasless SDK Demo</h2>
+      <p>Smart Account: {smartAccountAddress}</p>
+      <button onClick={handleTransaction} disabled={!sdk}>
+        Send Sponsored Transaction
+      </button>
+    </div>
+  );
+}
 ```
 
 ## 🏗️ Architecture
 
-The SDK consists of several core components:
-
-- **GaslessSDK**: Main SDK class and entry point
-- **TransactionBuilder**: Builds and formats transactions
-- **RelayerService**: Communicates with relayer infrastructure
-- **PaymasterService**: Handles ERC-4337 paymaster integration
-- **NetworkManager**: Manages multi-chain configurations
-- **SignatureValidator**: Validates transaction signatures
+The SDK is a wrapper around **Biconomy's AbstractJS SDK**, specifically utilizing the **MEE (Managed Execution Environment) Client**. It simplifies the process of creating a `MultichainNexusAccount` (a smart contract wallet) and submitting user operations to be executed through Biconomy's infrastructure. The core logic handles account creation, quote generation for gas fees, and transaction execution.
 
 ## 🌐 Supported Networks
 
-- Ethereum Mainnet (Chain ID: 1)
-- Ethereum Goerli (Chain ID: 5)
-- Polygon Mainnet (Chain ID: 137)
-- Polygon Mumbai (Chain ID: 80001)
-- Arbitrum One (Chain ID: 42161)
-- BSC Mainnet (Chain ID: 56)
+The SDK supports any chain compatible with Biconomy MEE. As of the latest version, this includes:
+- **Mainnets**: Ethereum, Polygon, Base, Optimism, Arbitrum.
+- **Testnets**: Sepolia, Base Sepolia, OP Sepolia, Arbitrum Sepolia, Polygon Amoy.
 
 ## 📚 API Reference
 
-### GaslessSDK
+### `GaslessSDK`
 
-#### Methods
+#### `static async initialize(config: SdkConfig): Promise<GaslessSDK>`
+Initializes the SDK asynchronously. This is the entry point for using the SDK.
+- `config`: An object containing `publicClient`, `walletClient`, and an optional `apiKey`.
 
-- `connectWallet(wallet: WalletInterface): Promise<void>`
-- `sendGaslessTransaction(transaction: Partial<GaslessTransaction>, onProgress?: TransactionCallback): Promise<RelayerResponse>`
-- `sendMetaTransaction(transaction: Partial<MetaTransaction>, onProgress?: TransactionCallback): Promise<RelayerResponse>`
-- `estimateGas(transaction: Partial<GaslessTransaction>): Promise<BigNumber>`
-- `switchNetwork(chainId: number): Promise<void>`
-- `getCurrentNetwork(): NetworkConfig`
-- `getAvailableNetworks(): NetworkConfig[]`
+#### `async sendGaslessTransaction(tx: TransactionRequest): Promise<string>`
+Sends a transaction where the gas fees are sponsored by the dApp. This requires your Biconomy Paymaster to be configured for sponsorship. Before sending the transaction, it will wait for a function `showMyGoogleAd()` to resolve.
+- `tx`: A transaction object with `to`, `value`, and optional `data`.
+- **Returns**: The transaction hash as a string.
 
-### Transaction Types
+#### `async sendTransactionWithNativeGas(tx: TransactionRequest): Promise<string>`
+Sends a transaction where the gas fees are paid using the native token (e.g., MATIC on Polygon) from the user's smart account.
+- **Returns**: The transaction hash.
 
-#### GaslessTransaction
-```typescript
-interface GaslessTransaction {
-  to: string;
-  data: string;
-  value?: BigNumber;
-  gasLimit?: BigNumber;
-  deadline?: number;
-  nonce?: BigNumber;
-  signature?: string;
-}
-```
+#### `async sendTransactionWithTokenGas(tx: TransactionRequest, gasToken: { address: string, chainId: number }): Promise<string>`
+Sends a transaction where gas fees are paid using a specified ERC-20 token.
+- `gasToken`: An object specifying the ERC-20 token address and its chain ID.
+- **Returns**: The transaction hash.
 
-#### MetaTransaction
-```typescript
-interface MetaTransaction {
-  from: string;
-  to: string;
-  value: BigNumber;
-  data: string;
-  operation: number;
-  gasToken: string;
-  gasPrice: BigNumber;
-  gasLimit: BigNumber;
-  deadline: number;
-  nonce: BigNumber;
-}
-```
+#### `getSmartAccountAddress(chainId?: number): string | undefined`
+Retrieves the address of the user's smart contract wallet for the specified or current chain.
+- **Returns**: The smart account address as a string, or `undefined` if not available.
+
+#### `static isChainSupported(chainId: number): boolean`
+A static method to check if a given `chainId` is supported by the SDK.
+- **Returns**: `true` if supported, `false` otherwise.
 
 ## 🛠️ Development
 
@@ -129,46 +144,8 @@ npm run build
 
 # Run tests
 npm test
-
-# Lint code
-npm run lint
-
-# Format code
-npm run format
-```
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with coverage
-npm run test:coverage
 ```
 
 ## 📄 License
 
 MIT License - see LICENSE file for details.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 🆘 Support
-
-- 📖 [Documentation](https://gasless-sdk.docs.com)
-- 💬 [Discord Community](https://discord.gg/gasless-sdk)
-- 🐛 [Issue Tracker](https://github.com/your-org/gasless-sdk/issues)
-
-## 🔗 Related Projects
-
-- [EIP-2771](https://eips.ethereum.org/EIPS/eip-2771) - Secure Protocol for Native Meta Transactions
-- [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) - Account Abstraction Using Alt Mempool
