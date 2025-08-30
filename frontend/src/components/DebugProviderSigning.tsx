@@ -77,7 +77,7 @@ export function DebugProviderSigning() {
       // 4단계: UserOperation 형식 테스트
       // Smart Account 주소 생성 (EOA 주소를 기반으로 한 deterministic 주소)
       const smartAccountAddress = `0x9406${address.slice(6, 42)}`;
-      
+
       const userOpDomain = {
         name: 'Account Abstraction',
         version: '1',

@@ -143,13 +143,13 @@ export class GaslessSDK {
     if (provider) {
       this.logger.info('📡 Provider를 통한 직접 서명 요청');
       
-      // MetaMask 호환 형식으로 데이터 변환
+      // EntryPoint 주소를 verifyingContract로 사용 (MetaMask 호환)
       const typedData = {
         domain: {
-          name: domain.name,
-          version: domain.version,
-          chainId: domain.chainId, // 숫자로 전달
-          verifyingContract: domain.verifyingContract,
+          name: 'Account Abstraction',
+          version: '1',
+          chainId: await this.wallet.getChainId(),
+          verifyingContract: this.entryPointAddress, // EntryPoint 주소 사용
         },
         types: {
           EIP712Domain: [
@@ -174,14 +174,14 @@ export class GaslessSDK {
         primaryType: 'UserOperation',
         message: {
           sender: userOpRequest.sender,
-          nonce: userOpRequest.nonce, // 이미 hex 형식
+          nonce: parseInt(userOpRequest.nonce, 16).toString(), // 10진수 문자열로 변환
           initCode: userOpRequest.initCode,
           callData: userOpRequest.callData,
-          callGasLimit: userOpRequest.callGasLimit, // 이미 hex 형식
-          verificationGasLimit: userOpRequest.verificationGasLimit,
-          preVerificationGas: userOpRequest.preVerificationGas,
-          maxFeePerGas: userOpRequest.maxFeePerGas,
-          maxPriorityFeePerGas: userOpRequest.maxPriorityFeePerGas,
+          callGasLimit: parseInt(userOpRequest.callGasLimit, 16).toString(), // 10진수로 변환
+          verificationGasLimit: parseInt(userOpRequest.verificationGasLimit, 16).toString(),
+          preVerificationGas: parseInt(userOpRequest.preVerificationGas, 16).toString(),
+          maxFeePerGas: parseInt(userOpRequest.maxFeePerGas, 16).toString(),
+          maxPriorityFeePerGas: parseInt(userOpRequest.maxPriorityFeePerGas, 16).toString(),
           paymasterAndData: userOpRequest.paymasterAndData,
         },
       };
