@@ -28,7 +28,7 @@ export const config = createConfig({
   transports: {
     [mainnet.id]: http(),
     [polygon.id]: http('https://polygon-mainnet.g.alchemy.com/v2/your-api-key'),
-    [sepolia.id]: http(),
+    [sepolia.id]: http('https://ethereum-sepolia.rpc.subquery.network/public'),
     [base.id]: http(),
     [optimism.id]: http(),
   },
