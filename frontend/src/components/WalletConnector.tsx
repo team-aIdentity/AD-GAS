@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
-import { SendTransaction } from './SendTransaction';
+import { ProviderDirectSigning } from './ProviderDirectSigning';
 import { NetworkInfo } from './NetworkInfo';
 
 export function WalletConnector() {
@@ -40,9 +40,9 @@ export function WalletConnector() {
           연결 해제
         </button>
 
-        {/* 송금하기 컴포넌트 */}
+        {/* Account Abstraction 송금 컴포넌트 */}
         <div className="w-full">
-          <SendTransaction address={address!} />
+          <ProviderDirectSigning address={address!} />
         </div>
       </div>
     );

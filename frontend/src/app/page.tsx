@@ -10,7 +10,7 @@ export default function Home() {
           <p className="text-lg text-gray-600">Next.js + Wagmi를 활용한 Web3 지갑 연결 데모</p>
         </div>
 
-        {/* 지갑 연결 컴포넌트 */}
+        {/* 지갑 연결 및 Account Abstraction */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
           <WalletConnector />
         </div>

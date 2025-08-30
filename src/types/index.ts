@@ -45,6 +45,8 @@ export interface GaslessSDKConfig {
   apiKey?: string;
   relayerEndpoint?: string;
   paymasterEndpoint?: string;
+  bundlerEndpoint?: string; // EIP-4337 Bundler endpoint
+  entryPointAddress?: string; // EntryPoint contract address
   debug?: boolean;
 }
 
@@ -228,6 +230,63 @@ export enum ErrorCodes {
 // Utility types
 export type EventCallback<T = any> = (event: T) => void;
 export type TransactionCallback = EventCallback<TransactionEvent>;
+
+// Account Abstraction (EIP-4337) Types
+export interface UserOperation {
+  sender: string;
+  nonce: string;
+  initCode: string;
+  callData: string;
+  callGasLimit: string;
+  verificationGasLimit: string;
+  preVerificationGas: string;
+  maxFeePerGas: string;
+  maxPriorityFeePerGas: string;
+  paymasterAndData: string;
+  signature: string;
+}
+
+export interface UserOperationRequest {
+  sender: string;
+  nonce: string;
+  initCode: string;
+  callData: string;
+  callGasLimit: string;
+  verificationGasLimit: string;
+  preVerificationGas: string;
+  maxFeePerGas: string;
+  maxPriorityFeePerGas: string;
+  paymasterAndData: string;
+}
+
+export interface BundlerResponse {
+  userOpHash: string;
+  bundlerTxHash?: string;
+}
+
+export interface UserOperationReceipt {
+  userOpHash: string;
+  sender: string;
+  paymaster: string;
+  nonce: string;
+  success: boolean;
+  actualGasCost: string;
+  actualGasUsed: string;
+  logs: any[];
+  receipt: {
+    transactionHash: string;
+    transactionIndex: string;
+    blockHash: string;
+    blockNumber: string;
+    from: string;
+    to: string;
+    cumulativeGasUsed: string;
+    gasUsed: string;
+    contractAddress?: string;
+    logs: any[];
+    status: string;
+  };
+}
 
 export interface WalletInterface {
   getAddress(): Promise<string>;
