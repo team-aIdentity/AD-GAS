@@ -1,90 +1,29 @@
 import {
   GaslessSDKConfig,
-  GaslessTransaction,
-  MetaTransaction,
-  NetworkConfig,
-  RelayerRequest,
-  RelayerResponse,
-  TransactionCallback,
   WalletInterface,
   GaslessSDKError,
   ErrorCodes,
-  BigNumber,
-  IRelayerService,
-  IPaymasterService,
-  INetworkManager,
-  ITransactionBuilder,
-  ISignatureValidator,
   UserOperation,
   UserOperationRequest,
   BundlerResponse,
   UserOperationReceipt,
 } from '../types';
-import { RelayerService } from '../relayer/RelayerService';
-import { PaymasterService } from '../paymaster/PaymasterService';
-import { PaymasterManager } from '../paymaster/PaymasterManager';
-import { TokenPaymaster } from '../paymaster/TokenPaymaster';
-import { NetworkManager } from '../networks/NetworkManager';
-import { TransactionBuilder } from './TransactionBuilder';
-import { SignatureValidator } from '../utils/SignatureValidator';
 import { Logger } from '../utils/Logger';
 
 export class GaslessSDK {
-  private config: GaslessSDKConfig;
-  private relayerService: IRelayerService;
-  private paymasterService: IPaymasterService;
-  private paymasterManager: PaymasterManager;
-  private networkManager: INetworkManager;
-  private transactionBuilder: ITransactionBuilder;
-  private signatureValidator: ISignatureValidator;
   private logger: Logger;
   private wallet?: WalletInterface;
   private bundlerEndpoint: string;
   private entryPointAddress: string;
 
-  constructor(
-    config: GaslessSDKConfig,
-    services?: {
-      relayerService?: IRelayerService;
-      paymasterService?: IPaymasterService;
-      networkManager?: INetworkManager;
-      transactionBuilder?: ITransactionBuilder;
-      signatureValidator?: ISignatureValidator;
-    }
-  ) {
-    this.config = config;
+  constructor(config: GaslessSDKConfig) {
     this.logger = new Logger(config.debug || false);
-    
+
     // Account Abstraction 설정
     this.bundlerEndpoint = config.bundlerEndpoint || 'https://bundler.example.com/rpc';
     this.entryPointAddress = config.entryPointAddress || '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
 
-    // Use provided services or create default instances
-    this.networkManager =
-      services?.networkManager || new NetworkManager(config.networks);
-    this.relayerService =
-      services?.relayerService ||
-      new RelayerService(config.relayerEndpoint, this.logger);
-    this.paymasterService =
-      services?.paymasterService ||
-      new PaymasterService(config.paymasterEndpoint, this.logger);
-    this.transactionBuilder =
-      services?.transactionBuilder || new TransactionBuilder(this.networkManager);
-    this.signatureValidator =
-      services?.signatureValidator || new SignatureValidator();
-
-    // Initialize paymaster manager
-    this.paymasterManager = new PaymasterManager(
-      new JsonRpcProvider(this.networkManager.getCurrentNetwork().rpcUrl),
-      '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789', // Standard EntryPoint
-      this.logger
-    );
-
-    this.logger.info(
-      'GaslessSDK initialized with config:',
-      this.networkManager.getAvailableNetworks().length,
-      'networks'
-    );
+    this.logger.info('GaslessSDK initialized for Account Abstraction');
   }
 
   /**
@@ -99,394 +38,11 @@ export class GaslessSDK {
   }
 
   /**
-   * Send a gasless transaction
-   */
-  public async sendGaslessTransaction(
-    transaction: Partial<GaslessTransaction>,
-    onProgress?: TransactionCallback
-  ): Promise<RelayerResponse> {
-    if (!this.wallet) {
-      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
-    }
-
-    try {
-      // Build the complete transaction
-      const completeTransaction = await this.transactionBuilder.buildTransaction(
-        transaction,
-        this.wallet
-      );
-
-      // Sign the transaction
-      const signature = await this.signTransaction(completeTransaction);
-      completeTransaction.signature = signature;
-
-      // Validate signature
-      if (!this.signatureValidator.validateSignature(completeTransaction, signature)) {
-        throw new GaslessSDKError('Invalid signature', ErrorCodes.INVALID_SIGNATURE);
-      }
-
-      // Create relayer request
-      const relayerRequest: RelayerRequest = {
-        transaction: completeTransaction,
-        signature,
-        chainId: await this.wallet.getChainId(),
-      };
-
-      // Submit to relayer
-      onProgress?.({
-        type: 'submitted',
-        transactionHash: '', // Will be filled by relayer
-      });
-
-      const response = await this.relayerService.submitTransaction(relayerRequest);
-
-      if (response.success && response.transactionHash) {
-        onProgress?.({
-          type: 'confirmed',
-          transactionHash: response.transactionHash,
-          gasUsed: response.gasUsed,
-        });
-      } else {
-        onProgress?.({
-          type: 'failed',
-          transactionHash: '',
-          error: response.error,
-        });
-      }
-
-      return response;
-    } catch (error) {
-      this.logger.error('Failed to send gasless transaction:', error);
-      
-      if (error instanceof GaslessSDKError) {
-        throw error;
-      }
-      
-      throw new GaslessSDKError(
-        'Transaction failed',
-        ErrorCodes.TRANSACTION_FAILED,
-        error
-      );
-    }
-  }
-
-  /**
-   * Send a meta-transaction with EIP-2771 support
-   */
-  public async sendMetaTransaction(
-    transaction: Partial<MetaTransaction>,
-    onProgress?: TransactionCallback
-  ): Promise<RelayerResponse> {
-    if (!this.wallet) {
-      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
-    }
-
-    try {
-      const metaTransaction = await this.transactionBuilder.buildMetaTransaction(
-        transaction,
-        this.wallet
-      );
-
-      const signature = await this.signMetaTransaction(metaTransaction);
-      
-      const relayerRequest: RelayerRequest = {
-        transaction: {
-          to: metaTransaction.to,
-          data: metaTransaction.data,
-          value: metaTransaction.value,
-          gasLimit: metaTransaction.gasLimit,
-          nonce: metaTransaction.nonce,
-          signature,
-        },
-        signature,
-        chainId: await this.wallet.getChainId(),
-      };
-
-      onProgress?.({
-        type: 'submitted',
-        transactionHash: '',
-      });
-
-      const response = await this.relayerService.submitMetaTransaction(relayerRequest);
-
-      if (response.success && response.transactionHash) {
-        onProgress?.({
-          type: 'confirmed',
-          transactionHash: response.transactionHash,
-          gasUsed: response.gasUsed,
-        });
-      } else {
-        onProgress?.({
-          type: 'failed',
-          transactionHash: '',
-          error: response.error,
-        });
-      }
-
-      return response;
-    } catch (error) {
-      this.logger.error('Failed to send meta-transaction:', error);
-      throw new GaslessSDKError(
-        'Meta-transaction failed',
-        ErrorCodes.TRANSACTION_FAILED,
-        error
-      );
-    }
-  }
-
-  /**
-   * Estimate gas for a gasless transaction
-   */
-  public async estimateGas(transaction: Partial<GaslessTransaction>): Promise<BigNumber> {
-    if (!this.wallet) {
-      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
-    }
-
-    return this.transactionBuilder.estimateGas(transaction, this.wallet);
-  }
-
-  /**
-   * Get current network configuration
-   */
-  public getCurrentNetwork(): NetworkConfig {
-    return this.networkManager.getCurrentNetwork();
-  }
-
-  /**
-   * Switch to a different network
-   */
-  public async switchNetwork(chainId: number): Promise<void> {
-    await this.networkManager.switchNetwork(chainId);
-    this.logger.info(`Switched to network: ${chainId}`);
-  }
-
-  /**
-   * Get available networks
-   */
-  public getAvailableNetworks(): NetworkConfig[] {
-    return this.networkManager.getAvailableNetworks();
-  }
-
-  /**
-   * Sign a gasless transaction
-   */
-  private async signTransaction(transaction: GaslessTransaction): Promise<string> {
-    if (!this.wallet) {
-      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
-    }
-
-    const message = this.transactionBuilder.getTransactionMessage(transaction);
-    return this.wallet.signMessage(message);
-  }
-
-  /**
-   * Sign a meta-transaction with EIP-712
-   */
-  private async signMetaTransaction(metaTransaction: MetaTransaction): Promise<string> {
-    if (!this.wallet) {
-      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
-    }
-
-    const { domain, types, value } = this.transactionBuilder.getEIP712Data(metaTransaction);
-    return this.wallet.signTypedData(domain, types, value);
-  }
-
-  /**
-   * Disconnect wallet and cleanup
+   * Disconnect wallet
    */
   public disconnect(): void {
     this.wallet = undefined;
     this.logger.info('Wallet disconnected');
-  }
-
-  /**
-   * Get paymaster service instance
-   */
-  public getPaymasterService(): IPaymasterService {
-    return this.paymasterService;
-  }
-
-  /**
-   * Get paymaster manager for advanced paymaster operations
-   */
-  public getPaymasterManager(): PaymasterManager {
-    return this.paymasterManager;
-  }
-
-  /**
-   * Get relayer service instance  
-   */
-  public getRelayerService(): RelayerService {
-    return this.relayerService;
-  }
-
-  /**
-   * Get SDK configuration
-   */
-  public getConfig(): GaslessSDKConfig {
-    return this.config;
-  }
-
-  /**
-   * Send gasless transaction with automatic paymaster selection
-   */
-  public async sendSponsoredTransaction(
-    transaction: Partial<GaslessTransaction>,
-    onProgress?: TransactionCallback
-  ): Promise<RelayerResponse> {
-    if (!this.wallet) {
-      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
-    }
-
-    try {
-      this.logger.info('Sending sponsored transaction with automatic paymaster selection');
-
-      // Build the transaction
-      const completeTransaction = await this.transactionBuilder.buildTransaction(
-        transaction,
-        this.wallet
-      );
-
-      // Convert to UserOperation for paymaster processing
-      const userOp: UserOperation = {
-        sender: await this.wallet.getAddress(),
-        nonce: completeTransaction.nonce || 0,
-        initCode: '0x',
-        callData: completeTransaction.data,
-        callGasLimit: completeTransaction.gasLimit || 200000,
-        verificationGasLimit: 100000,
-        preVerificationGas: 21000,
-        maxFeePerGas: await this.transactionBuilder.getGasPrice(),
-        maxPriorityFeePerGas: await this.transactionBuilder.getGasPrice(),
-        paymasterAndData: '0x',
-        signature: '0x',
-      };
-
-      // Find best paymaster and get sponsorship
-      const chainId = await this.wallet.getChainId();
-      const maxCost = BigInt(userOp.callGasLimit) * BigInt(userOp.maxFeePerGas);
-      
-      const paymasterResult = await this.paymasterManager.validateWithBestPaymaster(
-        userOp,
-        chainId,
-        maxCost
-      );
-
-      if (!paymasterResult) {
-        throw new GaslessSDKError(
-          'No paymaster available for sponsorship',
-          ErrorCodes.PAYMASTER_ERROR
-        );
-      }
-
-      // Update transaction with paymaster data
-      const sponsoredTransaction: GaslessTransaction = {
-        ...completeTransaction,
-        signature: await this.signTransaction(completeTransaction),
-      };
-
-      // Submit via relayer with paymaster info
-      onProgress?.({
-        type: 'submitted',
-        transactionHash: '',
-      });
-
-      const relayerRequest: RelayerRequest = {
-        transaction: sponsoredTransaction,
-        signature: sponsoredTransaction.signature!,
-        chainId,
-      };
-
-      const response = await this.relayerService.submitTransaction(relayerRequest);
-
-      // Execute paymaster postOp if transaction succeeded
-      if (response.success && response.transactionHash) {
-        try {
-          const paymaster = this.paymasterManager.getRegisteredPaymasters()
-            .find(p => p.id === paymasterResult.paymasterId)?.paymaster;
-
-          if (paymaster) {
-            await paymaster.postOp({
-              mode: 1, // opSucceeded
-              context: paymasterResult.validation.context,
-              actualGasCost: response.gasUsed || 0,
-              actualUserOpFeePerGas: response.effectiveGasPrice || 0,
-            });
-          }
-        } catch (postOpError) {
-          this.logger.warn('PostOp execution failed:', postOpError);
-        }
-
-        onProgress?.({
-          type: 'confirmed',
-          transactionHash: response.transactionHash,
-          gasUsed: response.gasUsed,
-        });
-      } else {
-        onProgress?.({
-          type: 'failed',
-          transactionHash: '',
-          error: response.error,
-        });
-      }
-
-      return response;
-    } catch (error) {
-      this.logger.error('Failed to send sponsored transaction:', error);
-      throw new GaslessSDKError(
-        'Sponsored transaction failed',
-        ErrorCodes.TRANSACTION_FAILED,
-        error
-      );
-    }
-  }
-
-  /**
-   * Register a token paymaster for ERC-20 gas payments
-   */
-  public async registerTokenPaymaster(
-    id: string,
-    tokenAddress: string,
-    exchangeRate: BigNumber,
-    paymasterAddress: string,
-    minBalance?: BigNumber
-  ): Promise<void> {
-    try {
-      const network = this.networkManager.getCurrentNetwork();
-      const provider = new JsonRpcProvider(network.rpcUrl);
-
-      const tokenConfig = {
-        tokenAddress,
-        tokenDecimals: 18, // Default, should be fetched from token contract
-        exchangeRate,
-        minBalance: minBalance || BigInt(1000),
-        maxGasPrice: BigInt('100000000000'), // 100 gwei
-      };
-
-      const tokenPaymaster = new TokenPaymaster(
-        tokenConfig,
-        paymasterAddress,
-        provider,
-        this.logger
-      );
-
-      this.paymasterManager.registerPaymaster(id, tokenPaymaster);
-      this.logger.info(`Token paymaster registered: ${id} for token: ${tokenAddress}`);
-    } catch (error) {
-      this.logger.error('Failed to register token paymaster:', error);
-      throw new GaslessSDKError(
-        'Failed to register token paymaster',
-        ErrorCodes.PAYMASTER_ERROR,
-        error
-      );
-    }
-  }
-
-  /**
-   * Get available paymasters
-   */
-  public getAvailablePaymasters(): Array<{ id: string; paymaster: IPaymasterService }> {
-    return this.paymasterManager.getRegisteredPaymasters();
   }
 
   /**
@@ -561,7 +117,7 @@ export class GaslessSDK {
     const domain = {
       name: 'Account Abstraction',
       version: '1',
-      chainId: await this.wallet.getChainId(),
+        chainId: await this.wallet.getChainId(),
       verifyingContract: userOpRequest.sender as `0x${string}`,
     };
 
@@ -600,9 +156,9 @@ export class GaslessSDK {
         
         this.logger.info('✅ Provider 직접 서명 완료');
         return signature;
-      } catch (error) {
+    } catch (error) {
         this.logger.error('❌ Provider 직접 서명 실패:', error);
-        throw new GaslessSDKError(
+      throw new GaslessSDKError(
           `Provider 서명 실패: ${error instanceof Error ? error.message : 'Unknown error'}`,
           ErrorCodes.INVALID_SIGNATURE
         );
@@ -614,27 +170,74 @@ export class GaslessSDK {
   }
 
   /**
-   * Send UserOperation to Bundler
+   * Send UserOperation to Bundler with provider-based signing
    */
   public async sendUserOperationToBundler(
+    transaction: {
+      to: string;
+      value?: bigint;
+      data?: string;
+    },
+    provider?: any, // Wagmi provider 직접 전달
+    onProgress?: (step: string) => void
+  ): Promise<BundlerResponse> {
+    if (!this.wallet) {
+      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
+    }
+
+    this.logger.info('🚀 Account Abstraction 트랜잭션 시작');
+    onProgress?.('UserOperation 생성 중...');
+
+    try {
+      // 1단계: UserOperation 생성
+      const userOpRequest = await this.createUserOperation(transaction);
+      this.logger.info('📦 UserOperation 생성 완료:', userOpRequest);
+
+      // 2단계: UserOperation 서명
+      onProgress?.('UserOperation 서명 중...');
+      const signature = await this.signUserOperation(userOpRequest, provider);
+      
+      const signedUserOp: UserOperation = {
+        ...userOpRequest,
+        signature,
+      };
+
+      this.logger.info('✅ UserOperation 서명 완료');
+
+      // 3단계: Bundler로 전송
+      onProgress?.('Bundler로 전송 중...');
+      const bundlerResult = await this.submitUserOperationToBundler(signedUserOp, onProgress);
+
+      this.logger.info('🎉 Account Abstraction 트랜잭션 완료');
+      return bundlerResult;
+
+    } catch (error) {
+      this.logger.error('❌ Account Abstraction 트랜잭션 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Submit signed UserOperation to Bundler
+   */
+  private async submitUserOperationToBundler(
     userOperation: UserOperation,
     onProgress?: (step: string) => void
   ): Promise<BundlerResponse> {
-    this.logger.info('📡 Bundler로 UserOperation 전송 시작');
-    onProgress?.('Bundler로 UserOperation 전송 중...');
-
+    this.logger.info('📡 Bundler API 호출:', this.bundlerEndpoint);
+    
     try {
-      // Bundler RPC 요청
       const response = await fetch(this.bundlerEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'User-Agent': 'GaslessSDK/1.0.0',
         },
         body: JSON.stringify({
           jsonrpc: '2.0',
           method: 'eth_sendUserOperation',
-          params: [userOperation, this.entryPointAddress],
+          params: [userOperation],
           id: Date.now(),
         }),
       });
@@ -651,13 +254,11 @@ export class GaslessSDK {
 
       const userOpHash = result.result;
       this.logger.info('✅ UserOperation Hash 받음:', userOpHash);
-      onProgress?.('UserOperation 전송 완료, 트랜잭션 대기 중...');
 
-      // UserOperation이 실제 트랜잭션으로 변환될 때까지 대기
+      // UserOperation Receipt 대기
+      onProgress?.('트랜잭션 확인 대기 중...');
       const bundlerTxHash = await this.waitForUserOperationReceipt(userOpHash, onProgress);
 
-      this.logger.info('🎉 Bundler 트랜잭션 완료:', bundlerTxHash);
-      
       return {
         userOpHash,
         bundlerTxHash,
@@ -753,23 +354,11 @@ export class GaslessSDK {
    */
   public async getUserOperationNonce(smartAccountAddress: string): Promise<bigint> {
     try {
-      const response = await fetch(this.bundlerEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_getUserOperationByHash', // 또는 다른 nonce 조회 메서드
-          params: [smartAccountAddress, this.entryPointAddress],
-          id: Date.now(),
-        }),
-      });
-
-      const result = await response.json();
-      
       // 실제로는 Smart Account 컨트랙트에서 nonce 조회
-      // 여기서는 예시를 위해 랜덤 nonce 반환
+      // 또는 Bundler API를 통한 nonce 조회
+      this.logger.info('Nonce 조회 for Smart Account:', smartAccountAddress);
+      
+      // 예시를 위해 랜덤 nonce 반환
       return BigInt(Math.floor(Math.random() * 1000000));
       
     } catch (error) {
@@ -825,9 +414,9 @@ export class GaslessSDK {
             {
               sender: params.sender,
               nonce: '0x0',
-              initCode: '0x',
+        initCode: '0x',
               callData: params.callData,
-              paymasterAndData: '0x',
+        paymasterAndData: '0x',
             },
             this.entryPointAddress
           ],
@@ -862,110 +451,6 @@ export class GaslessSDK {
         maxFeePerGas: BigInt(1500000000), // 1.5 gwei
         maxPriorityFeePerGas: BigInt(1500000000),
       };
-    }
-  }
-
-  /**
-   * Send UserOperation to Bundler with provider-based signing
-   */
-  public async sendUserOperationToBundler(
-    transaction: {
-      to: string;
-      value?: bigint;
-      data?: string;
-    },
-    provider?: any, // Wagmi provider 직접 전달
-    onProgress?: (step: string) => void
-  ): Promise<BundlerResponse> {
-    if (!this.wallet) {
-      throw new GaslessSDKError('Wallet not connected', ErrorCodes.INVALID_SIGNATURE);
-    }
-
-    this.logger.info('🚀 Account Abstraction 트랜잭션 시작');
-    onProgress?.('UserOperation 생성 중...');
-
-    try {
-      // 1단계: UserOperation 생성
-      const userOpRequest = await this.createUserOperation(transaction);
-      this.logger.info('📦 UserOperation 생성 완료:', userOpRequest);
-
-      // 2단계: UserOperation 서명
-      onProgress?.('UserOperation 서명 중...');
-      const signature = await this.signUserOperation(userOpRequest, provider);
-      
-      const signedUserOp: UserOperation = {
-        ...userOpRequest,
-        signature,
-      };
-
-      this.logger.info('✅ UserOperation 서명 완료');
-
-      // 3단계: Bundler로 전송
-      onProgress?.('Bundler로 전송 중...');
-      const bundlerResult = await this.submitUserOperationToBundler(signedUserOp, onProgress);
-
-      this.logger.info('🎉 Account Abstraction 트랜잭션 완료');
-      return bundlerResult;
-
-    } catch (error) {
-      this.logger.error('❌ Account Abstraction 트랜잭션 실패:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Submit signed UserOperation to Bundler
-   */
-  private async submitUserOperationToBundler(
-    userOperation: UserOperation,
-    onProgress?: (step: string) => void
-  ): Promise<BundlerResponse> {
-    this.logger.info('📡 Bundler API 호출:', this.bundlerEndpoint);
-    
-    try {
-      const response = await fetch(this.bundlerEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': 'GaslessSDK/1.0.0',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_sendUserOperation',
-          params: [userOperation, this.entryPointAddress],
-          id: Date.now(),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Bundler HTTP 오류: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.error) {
-        throw new Error(`Bundler RPC 오류: ${result.error.message} (코드: ${result.error.code})`);
-      }
-
-      const userOpHash = result.result;
-      this.logger.info('✅ UserOperation Hash 받음:', userOpHash);
-
-      // UserOperation Receipt 대기
-      onProgress?.('트랜잭션 확인 대기 중...');
-      const bundlerTxHash = await this.waitForUserOperationReceipt(userOpHash, onProgress);
-
-      return {
-        userOpHash,
-        bundlerTxHash,
-      };
-
-    } catch (error) {
-      this.logger.error('❌ Bundler 전송 실패:', error);
-      throw new GaslessSDKError(
-        `Bundler 전송 실패: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        ErrorCodes.TRANSACTION_FAILED
-      );
     }
   }
 
