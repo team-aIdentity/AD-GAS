@@ -6,7 +6,7 @@ import { injected, metaMask, walletConnect, coinbaseWallet } from 'wagmi/connect
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
 
 export const config = createConfig({
-  chains: [mainnet, polygon, sepolia, base, optimism],
+  chains: [sepolia, mainnet, polygon, base, optimism], // Sepolia를 첫 번째로
   connectors: [
     injected(), // MetaMask, Coinbase Wallet 등 브라우저 지갑
     metaMask(), // MetaMask 전용 커넥터

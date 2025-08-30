@@ -222,8 +222,8 @@ export function ProviderDirectSigning({ address }: ProviderDirectSigningProps) {
       {/* 코드 예제 */}
       <div className="p-3 bg-gray-100 rounded text-xs">
         <h4 className="font-semibold mb-2">💻 핵심 코드:</h4>
-                <pre className="text-gray-700 whitespace-pre-wrap">
-{`// 1. Provider에서 네트워크 정보 가져오기
+        <pre className="text-gray-700 whitespace-pre-wrap">
+          {`// 1. Provider에서 네트워크 정보 가져오기
 const provider = await connector.getProvider();
 const networkInfo = await getProviderNetworkInfo(provider);
 

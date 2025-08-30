@@ -21,10 +21,10 @@ export async function createDynamicSDKConfig(
     console.log('📡 현재 Chain ID:', chainId);
 
     // 2. 네트워크 이름 가져오기 (가능한 경우)
-    let networkName = getNetworkName(chainId);
+    const networkName = getNetworkName(chainId);
     
     // 3. RPC URL 가져오기 (가능한 경우)
-    let rpcUrl = getRPCUrl(chainId);
+    const rpcUrl = getRPCUrl(chainId);
 
     // 4. 가스 토큰 정보 가져오기
     const gasTokens = getGasTokens(chainId);
@@ -167,14 +167,14 @@ function getDefaultSDKConfig(): GaslessSDKConfig {
   return {
     networks: [
       {
-        chainId: 137,
-        name: 'Polygon Mainnet',
-        rpcUrl: 'https://polygon-mainnet.g.alchemy.com/v2/YOUR_API_KEY',
+        chainId: 11155111,
+        name: 'Sepolia Testnet',
+        rpcUrl: 'https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY',
         gasTokens: ['0x0000000000000000000000000000000000000000'],
       },
     ],
-    defaultNetwork: 137,
-    bundlerEndpoint: 'https://bundler.stackup.sh/v1/polygon/YOUR_API_KEY',
+    defaultNetwork: 11155111,
+    bundlerEndpoint: 'https://bundler.stackup.sh/v1/sepolia/YOUR_API_KEY',
     entryPointAddress: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
     debug: true,
   };
