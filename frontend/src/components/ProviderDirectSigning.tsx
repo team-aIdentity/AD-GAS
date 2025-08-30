@@ -2,28 +2,9 @@
 
 import React, { useState } from 'react';
 import { useAccount, useConnectorClient } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
-import { GaslessSDK, GaslessSDKConfig } from '../../../src';
-
-// SDK 설정
-const sdkConfig: GaslessSDKConfig = {
-  networks: [
-    {
-      chainId: 137,
-      name: 'Polygon Mainnet',
-      rpcUrl: 'https://polygon-mainnet.g.alchemy.com/v2/your-api-key',
-      relayerUrl: 'https://relayer.example.com',
-      paymasterAddress: '0x1234567890123456789012345678901234567890',
-      gasTokens: ['0x0000000000000000000000000000000000000000'],
-    },
-  ],
-  defaultNetwork: 137,
-  relayerEndpoint: 'https://relayer.example.com',
-  paymasterEndpoint: 'https://paymaster.example.com',
-  bundlerEndpoint: 'https://bundler.stackup.sh/v1/polygon/YOUR_API_KEY',
-  entryPointAddress: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789',
-  debug: true,
-};
+import { parseEther } from 'viem';
+import { GaslessSDK } from '../../../src';
+import { createDynamicSDKConfig, getProviderNetworkInfo } from '../utils/dynamicSDKConfig';
 
 interface ProviderDirectSigningProps {
   address: string;
@@ -60,9 +41,21 @@ export function ProviderDirectSigning({ address }: ProviderDirectSigningProps) {
     try {
       addLog('🚀 Provider 직접 서명 + Bundler 전송 시작');
 
-      // 1단계: SDK 초기화
-      const sdk = new GaslessSDK(sdkConfig);
-      addLog('✅ SDK 초기화 완료');
+      // 1단계: Provider 가져오기
+      const provider = await connector.getProvider();
+      addLog(`📡 Provider 연결됨: ${connector.name}`);
+
+      // 2단계: Provider에서 네트워크 정보 가져오기
+      const networkInfo = await getProviderNetworkInfo(provider);
+      addLog('🌐 네트워크 정보 조회됨:', networkInfo);
+
+      // 3단계: 동적 SDK 설정 생성
+      const dynamicConfig = await createDynamicSDKConfig(provider, address);
+      addLog('⚙️ 동적 SDK 설정 생성됨:', dynamicConfig);
+
+      // 4단계: 동적 설정으로 SDK 초기화
+      const sdk = new GaslessSDK(dynamicConfig);
+      addLog('✅ SDK 초기화 완료 (동적 설정 사용)');
 
       // 2단계: 지갑 어댑터 연결
       const walletAdapter = {
@@ -78,18 +71,16 @@ export function ProviderDirectSigning({ address }: ProviderDirectSigningProps) {
           return '0x' + '1'.repeat(130); // Mock
         },
         async getChainId() {
-          return 137;
+          // Provider에서 실제 체인 ID 가져오기
+          const chainIdHex = await provider.request({ method: 'eth_chainId' });
+          return parseInt(chainIdHex, 16);
         },
       };
 
       await sdk.connectWallet(walletAdapter);
       addLog('🔗 지갑 어댑터 연결 완료');
 
-      // 3단계: Provider 가져오기
-      const provider = await connector.getProvider();
-      addLog(`📡 Provider 연결됨: ${connector.name}`);
-
-      // 4단계: SDK의 sendUserOperationToBundler 호출
+      // 7단계: SDK의 sendUserOperationToBundler 호출 (Provider 이미 있음)
       addLog('🔄 SDK sendUserOperationToBundler 호출...');
 
       const bundlerResult = await sdk.sendUserOperationToBundler(
@@ -135,15 +126,15 @@ export function ProviderDirectSigning({ address }: ProviderDirectSigningProps) {
       {/* 핵심 설명 */}
       <div className="p-3 bg-blue-50 border border-blue-200 rounded">
         <p className="text-xs text-blue-800">
-          🎯 <strong>핵심 기능:</strong>
+          🎯 <strong>동적 SDK 설정 기능:</strong>
           <br />
-          1. Wagmi Connector에서 Provider 직접 가져오기
+          1. Provider에서 실시간 네트워크 정보 조회
           <br />
-          2. Provider를 SDK에 전달하여 직접 서명 요청
+          2. Chain ID, RPC URL, Bundler 엔드포인트 자동 설정
           <br />
-          3. <strong>RPC 우회하고 Bundler로 직접 전송</strong>
+          3. <strong>네트워크별 최적화된 설정으로 SDK 초기화</strong>
           <br />
-          4. UserOperation → 실제 트랜잭션 변환 추적
+          4. Provider 직접 서명 + Bundler 전송
         </p>
       </div>
 
@@ -231,21 +222,22 @@ export function ProviderDirectSigning({ address }: ProviderDirectSigningProps) {
       {/* 코드 예제 */}
       <div className="p-3 bg-gray-100 rounded text-xs">
         <h4 className="font-semibold mb-2">💻 핵심 코드:</h4>
-        <pre className="text-gray-700 whitespace-pre-wrap">
-          {`// 1. Provider 가져오기
+                <pre className="text-gray-700 whitespace-pre-wrap">
+{`// 1. Provider에서 네트워크 정보 가져오기
 const provider = await connector.getProvider();
+const networkInfo = await getProviderNetworkInfo(provider);
 
-// 2. SDK에 Provider 전달
+// 2. 동적 SDK 설정 생성
+const config = await createDynamicSDKConfig(provider, address);
+
+// 3. 동적 설정으로 SDK 초기화
+const sdk = new GaslessSDK(config);
+
+// 4. Provider 직접 서명 + Bundler 전송
 const result = await sdk.sendUserOperationToBundler(
   { to, value, data },
   provider  // 🔑 핵심: Provider 직접 전달!
-);
-
-// 3. SDK 내부에서 Provider로 직접 서명 요청
-await provider.request({
-  method: 'eth_signTypedData_v4',
-  params: [address, typedDataJSON]
-});`}
+);`}
         </pre>
       </div>
     </div>

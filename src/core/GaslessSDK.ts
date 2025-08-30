@@ -140,17 +140,57 @@ export class GaslessSDK {
     if (provider) {
       this.logger.info('📡 Provider를 통한 직접 서명 요청');
       
+      // MetaMask 호환 형식으로 데이터 변환
+      const typedData = {
+        domain: {
+          name: domain.name,
+          version: domain.version,
+          chainId: domain.chainId, // 숫자로 전달
+          verifyingContract: domain.verifyingContract,
+        },
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' },
+          ],
+          UserOperation: [
+            { name: 'sender', type: 'address' },
+            { name: 'nonce', type: 'uint256' },
+            { name: 'initCode', type: 'bytes' },
+            { name: 'callData', type: 'bytes' },
+            { name: 'callGasLimit', type: 'uint256' },
+            { name: 'verificationGasLimit', type: 'uint256' },
+            { name: 'preVerificationGas', type: 'uint256' },
+            { name: 'maxFeePerGas', type: 'uint256' },
+            { name: 'maxPriorityFeePerGas', type: 'uint256' },
+            { name: 'paymasterAndData', type: 'bytes' },
+          ],
+        },
+        primaryType: 'UserOperation',
+        message: {
+          sender: userOpRequest.sender,
+          nonce: userOpRequest.nonce, // 이미 hex 형식
+          initCode: userOpRequest.initCode,
+          callData: userOpRequest.callData,
+          callGasLimit: userOpRequest.callGasLimit, // 이미 hex 형식
+          verificationGasLimit: userOpRequest.verificationGasLimit,
+          preVerificationGas: userOpRequest.preVerificationGas,
+          maxFeePerGas: userOpRequest.maxFeePerGas,
+          maxPriorityFeePerGas: userOpRequest.maxPriorityFeePerGas,
+          paymasterAndData: userOpRequest.paymasterAndData,
+        },
+      };
+
+      this.logger.info('📝 MetaMask 호환 EIP-712 데이터:', typedData);
+      
       try {
         const signature = await provider.request({
           method: 'eth_signTypedData_v4',
           params: [
             await this.wallet.getAddress(),
-            JSON.stringify({
-              domain,
-              types,
-              primaryType: 'UserOperation',
-              message: userOpRequest,
-            })
+            JSON.stringify(typedData)
           ]
         });
         

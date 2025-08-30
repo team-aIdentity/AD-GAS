@@ -2,30 +2,8 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccount, useSignMessage, useSignTypedData, useConnectorClient } from 'wagmi';
-import { GaslessSDK, GaslessSDKConfig } from '../../../src';
-
-// Account Abstraction을 위한 SDK 설정
-const aaConfig: GaslessSDKConfig = {
-  networks: [
-    {
-      chainId: 137,
-      name: 'Polygon Mainnet',
-      rpcUrl: 'https://polygon-mainnet.g.alchemy.com/v2/your-api-key',
-      relayerUrl: 'https://relayer.example.com',
-      paymasterAddress: '0x1234567890123456789012345678901234567890',
-      gasTokens: [
-        '0x0000000000000000000000000000000000000000', // MATIC
-        '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // USDC
-      ],
-    },
-  ],
-  defaultNetwork: 137,
-  relayerEndpoint: 'https://relayer.example.com',
-  paymasterEndpoint: 'https://paymaster.example.com',
-  bundlerEndpoint: 'https://bundler.stackup.sh/v1/polygon/YOUR_API_KEY', // 실제 Bundler URL
-  entryPointAddress: '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789', // EntryPoint v0.6
-  debug: true,
-};
+import { GaslessSDK } from '../../../src';
+import { createDynamicSDKConfig } from '../utils/dynamicSDKConfig';
 
 interface AATransactionParams {
   to: string;
@@ -73,11 +51,24 @@ export function useAccountAbstractionTransaction() {
       console.log('📝 트랜잭션 파라미터:', params);
 
       try {
-        // 1단계: SDK 초기화
-        console.log('🚀 2단계: Gasless SDK 초기화');
-        const sdk = new GaslessSDK(aaConfig);
+        // 1단계: Provider 가져오기
+        if (!connector) {
+          throw new Error('커넥터가 연결되지 않았습니다');
+        }
 
-        // 2단계: Wagmi 서명 어댑터 생성
+        const provider = await connector.getProvider();
+        console.log('📡 Provider 연결됨:', connector.name);
+
+        // 2단계: Provider에서 네트워크 정보 가져와서 동적 SDK 설정 생성
+        console.log('🔄 Provider에서 동적 SDK 설정 생성 중...');
+        const dynamicConfig = await createDynamicSDKConfig(provider, address);
+        console.log('✅ 동적 SDK 설정 생성 완료:', dynamicConfig);
+
+        // 3단계: 동적 설정으로 SDK 초기화
+        console.log('🚀 동적 설정으로 SDK 초기화');
+        const sdk = new GaslessSDK(dynamicConfig);
+
+        // 4단계: Wagmi 서명 어댑터 생성
         const wagmiSigningAdapter = {
           async getAddress() {
             return address;
@@ -99,27 +90,18 @@ export function useAccountAbstractionTransaction() {
           },
           
           async getChainId() {
-            return 137; // Polygon
+            // Provider에서 실제 체인 ID 가져오기
+            const chainIdHex = await provider.request({ method: 'eth_chainId' });
+            return parseInt(chainIdHex, 16);
           }
         };
 
-        // 3단계: SDK에 지갑 연결
-        console.log('🔗 3단계: SDK에 지갑 어댑터 연결');
+        // 5단계: SDK에 지갑 연결
+        console.log('🔗 5단계: SDK에 지갑 어댑터 연결');
         await sdk.connectWallet(wagmiSigningAdapter);
 
-        // 4단계: Provider 가져오기 (직접 서명을 위해)
-        let provider = null;
-        if (connector) {
-          try {
-            provider = await connector.getProvider();
-            console.log('📡 Provider 연결됨:', connector.name);
-          } catch (error) {
-            console.warn('Provider 가져오기 실패, 기본 서명 방식 사용:', error);
-          }
-        }
-
-        // 5단계: SDK의 새로운 sendUserOperationToBundler 메서드 사용
-        console.log('🚀 5단계: SDK를 통한 Account Abstraction 실행');
+        // 6단계: SDK의 sendUserOperationToBundler 메서드 사용 (Provider 직접 전달)
+        console.log('🚀 6단계: SDK를 통한 Account Abstraction 실행');
         const bundlerResult = await sdk.sendUserOperationToBundler(
           {
             to: params.to,
