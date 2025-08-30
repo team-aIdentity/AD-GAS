@@ -163,14 +163,14 @@ export function StepByStepDebug() {
           name: 'Account Abstraction',
           version: '1',
           chainId: 11155111,
-          verifyingContract: entryPointAddress, // EntryPoint 주소 사용
+          // verifyingContract 완전 제거
         },
         types: {
           EIP712Domain: [
             { name: 'name', type: 'string' },
             { name: 'version', type: 'string' },
             { name: 'chainId', type: 'uint256' },
-            { name: 'verifyingContract', type: 'address' },
+            // verifyingContract 타입 정의 제거
           ],
           UserOperation: [
             { name: 'sender', type: 'address' },
@@ -181,7 +181,7 @@ export function StepByStepDebug() {
         primaryType: 'UserOperation',
         message: {
           sender: `0x9406${address.slice(6)}`, // Smart Account 주소
-          nonce: '1',
+          nonce: '1', // 10진수 문자열
           callData: '0x',
         },
       };

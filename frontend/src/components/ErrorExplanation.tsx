@@ -21,7 +21,7 @@ export function ErrorExplanation() {
         <div className="p-3 bg-green-50 border border-green-200 rounded">
           <h5 className="font-semibold text-green-800 mb-1">✅ 해결 방법:</h5>
           <p className="text-green-700">
-            <code>verifyingContract</code>로 <strong>Smart Account 주소</strong>를 사용해야 함
+            <code>verifyingContract</code>를 <strong>완전히 제거</strong>하여 MetaMask 오류 방지
           </p>
         </div>
 
@@ -30,13 +30,15 @@ export function ErrorExplanation() {
           <pre className="text-xs text-blue-700 bg-white p-2 rounded overflow-x-auto">
 {`// ❌ 기존 (오류 발생)
 const domain = {
-  verifyingContract: userEOAAddress // EOA 주소 사용
+  verifyingContract: userEOAAddress // 어떤 주소든 문제 발생
 };
 
-// ✅ 수정 (정상 작동)
-const smartAccountAddress = await sdk.getSmartAccountAddress();
+// ✅ 최종 해결 (정상 작동)
 const domain = {
-  verifyingContract: smartAccountAddress // Smart Account 주소 사용
+  name: 'Account Abstraction',
+  version: '1',
+  chainId: 11155111
+  // verifyingContract 완전 제거!
 };`}
           </pre>
         </div>

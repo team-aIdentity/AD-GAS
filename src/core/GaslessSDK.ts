@@ -143,20 +143,20 @@ export class GaslessSDK {
     if (provider) {
       this.logger.info('📡 Provider를 통한 직접 서명 요청');
       
-      // EntryPoint 주소를 verifyingContract로 사용 (MetaMask 호환)
+      // verifyingContract 제거로 MetaMask 호환성 향상
       const typedData = {
         domain: {
           name: 'Account Abstraction',
           version: '1',
           chainId: await this.wallet.getChainId(),
-          verifyingContract: this.entryPointAddress, // EntryPoint 주소 사용
+          // verifyingContract 제거 - MetaMask 오류 방지
         },
         types: {
           EIP712Domain: [
             { name: 'name', type: 'string' },
             { name: 'version', type: 'string' },
             { name: 'chainId', type: 'uint256' },
-            { name: 'verifyingContract', type: 'address' },
+            // verifyingContract 타입 정의도 제거
           ],
           UserOperation: [
             { name: 'sender', type: 'address' },

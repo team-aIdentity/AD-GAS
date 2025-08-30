@@ -74,15 +74,12 @@ export function DebugProviderSigning() {
         addLog('❌ 간단한 서명 실패', { error: simpleError.message, code: simpleError.code });
       }
 
-      // 4단계: UserOperation 형식 테스트
-      // Smart Account 주소 생성 (EOA 주소를 기반으로 한 deterministic 주소)
-      const smartAccountAddress = `0x9406${address.slice(6, 42)}`;
-
+            // 4단계: UserOperation 형식 테스트 (verifyingContract 제거)
       const userOpDomain = {
         name: 'Account Abstraction',
         version: '1',
         chainId: 11155111,
-        verifyingContract: smartAccountAddress, // Smart Account 주소 사용
+        // verifyingContract 완전 제거
       };
 
       const userOpTypes = {
@@ -101,7 +98,7 @@ export function DebugProviderSigning() {
       };
 
       const userOpMessage = {
-        sender: smartAccountAddress, // Smart Account 주소 사용
+        sender: `0x9406${address.slice(6)}`, // Smart Account 주소 사용
         nonce: '0x1',
         initCode: '0x',
         callData:
