@@ -32,20 +32,22 @@
   "author": "Gasless SDK Team",
   "license": "MIT",
   "dependencies": {
-    "ethers": "^6.13.2",
+    "@ethersproject/experimental": "^5.7.0",
+    "@tanstack/react-query": "^5.85.5",
     "axios": "^1.7.7",
-    "ws": "^8.18.0",
-    "@ethersproject/experimental": "^5.7.0"
+    "ethers": "^6.15.0",
+    "wagmi": "^2.16.9",
+    "ws": "^8.18.0"
   },
   "peerDependencies": {
     "react": ">=16.8.0",
     "vue": ">=3.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.5.4",
     "@types/jest": "^29.5.12",
-    "@types/ws": "^8.5.12",
+    "@types/node": "^22.5.4",
     "@types/react": "^18.3.5",
+    "@types/ws": "^8.5.12",
     "@typescript-eslint/eslint-plugin": "^8.5.0",
     "@typescript-eslint/parser": "^8.5.0",
     "eslint": "^9.9.1",
