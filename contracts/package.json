@@ -1,0 +1,25 @@
+{
+  "name": "ad-wallet-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "deploy:amoy": "hardhat run scripts/deploy.ts --network polygonAmoy",
+    "deploy:sponsored-transfer:avalanche": "NETWORK_NAME=AVALANCHE hardhat run scripts/deploy-sponsored-transfer.ts --network avalanche",
+    "deploy:sponsored-transfer:base": "NETWORK_NAME=BASE hardhat run scripts/deploy-sponsored-transfer.ts --network base",
+    "deploy:sponsored-transfer:bsc": "NETWORK_NAME=BNB hardhat run scripts/deploy-sponsored-transfer.ts --network bsc",
+    "deploy:sponsored-transfer:base-sepolia": "NETWORK_NAME=BASE_SEPOLIA hardhat run scripts/deploy-sponsored-transfer.ts --network baseSepolia",
+    "withdraw:old:avalanche": "NETWORK_NAME=AVALANCHE hardhat run scripts/withdraw-from-old-contract.ts --network avalanche"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.0",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2",
+    "dotenv": "^16.4.5"
+  }
+}

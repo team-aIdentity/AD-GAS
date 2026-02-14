@@ -4,7 +4,7 @@ import React from 'react';
 import { Connector, useAccount, useConnect, useDisconnect } from 'wagmi';
 import { NetworkInfo } from './NetworkInfo';
 import { TransferUI } from './ProviderDirectSigning';
-import GaslessTransaction from './gaslesstransaction';
+import { Form1TransferUI } from './Form1TransferUI';
 
 export function WalletConnector() {
   const { address, isConnected, connector } = useAccount();
@@ -41,9 +41,9 @@ export function WalletConnector() {
           연결 해제
         </button>
 
-        {/* Account Abstraction 송금 컴포넌트 */}
-        <div className="w-full space-y-3">
-          <GaslessTransaction />
+        {/* 형태 1 (기획서): 광고 시청 후 1회 무료 전송 */}
+        <div className="w-full mt-6 p-4 bg-white border border-gray-200 rounded-xl">
+          <Form1TransferUI />
         </div>
       </div>
     );

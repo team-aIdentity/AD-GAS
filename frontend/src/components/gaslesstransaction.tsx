@@ -2,17 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccount, useConnect, useDisconnect, usePublicClient, useWalletClient } from 'wagmi';
 import { injected } from 'wagmi/connectors';
 import { parseEther, http } from 'viem';
-import {
-  base,
-  optimism,
-  arbitrum,
-  polygon,
-  mainnet,
-  baseSepolia,
-  optimismSepolia,
-  arbitrumSepolia,
-  polygonAmoy,
-} from 'viem/chains';
+import { base, mainnet, sepolia, avalanche } from 'viem/chains';
 import {
   toMultichainNexusAccount,
   createMeeClient,
@@ -35,23 +25,23 @@ export default function GaslessTransaction() {
   const [loading, setLoading] = useState(false);
   const [chainError, setChainError] = useState<string>('');
 
-  // MEE 지원 체인 목록 (메인넷 + 테스트넷)
+  // 지원 체인 4개: 이더리움, 베이스, 아발란체, 세폴리아
   const supportedChains = useMemo(
     () => [
-      // 메인넷 (Polygon 우선)
-      { id: 137, name: 'Polygon Mainnet', chain: polygon },
-      { id: 1, name: 'Ethereum Mainnet', chain: mainnet },
-      { id: 8453, name: 'Base Mainnet', chain: base },
-      { id: 10, name: 'OP Mainnet', chain: optimism },
-      { id: 42161, name: 'Arbitrum Mainnet', chain: arbitrum },
-      // 테스트넷 (Polygon Amoy 우선)
-      { id: 80002, name: 'Polygon Amoy', chain: polygonAmoy },
-      { id: 84532, name: 'Base Sepolia', chain: baseSepolia },
-      { id: 11155420, name: 'OP Sepolia', chain: optimismSepolia },
-      { id: 421614, name: 'Arbitrum Sepolia', chain: arbitrumSepolia },
+      { id: sepolia.id, name: 'Sepolia', chain: sepolia },
+      { id: mainnet.id, name: 'Ethereum Mainnet', chain: mainnet },
+      { id: base.id, name: 'Base Mainnet', chain: base },
+      { id: avalanche.id, name: 'Avalanche C-Chain', chain: avalanche },
     ],
     []
   );
+
+  const RPC_URLS: Record<number, string> = {
+    1: process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://eth.llamarpc.com',
+    11155111: process.env.NEXT_PUBLIC_RPC_SEPOLIA || 'https://rpc.sepolia.org',
+    8453: process.env.NEXT_PUBLIC_RPC_BASE || 'https://mainnet.base.org',
+    43114: process.env.NEXT_PUBLIC_RPC_AVALANCHE || 'https://api.avax.network/ext/bc/C/rpc',
+  };
 
   // 현재 체인이 지원되는지 확인하는 함수
   const isChainSupported = useCallback(
@@ -73,6 +63,11 @@ export default function GaslessTransaction() {
         walletClient.account &&
         walletClient.chain
       ) {
+        if (!isChainSupported(walletClient.chain.id)) {
+          setChainError(`지원하지 않는 네트워크입니다. Ethereum, Base, Avalanche, Sepolia 중 하나로 전환해 주세요. (현재: ${walletClient.chain.name})`);
+          setLoading(false);
+          return;
+        }
         setLoading(true);
         setChainError('');
 
@@ -80,12 +75,16 @@ export default function GaslessTransaction() {
           console.log('✅ Chain supported:', walletClient.chain.name);
           console.log('Initializing MEE client...');
 
+          // 명시 RPC 사용 (eth.merkle.io 등 실패 방지)
+          const rpcUrl = RPC_URLS[walletClient.chain.id] || walletClient.chain.rpcUrls?.default?.http?.[0];
+          const transport = rpcUrl ? http(rpcUrl) : http();
+
           // 2. Multichain Nexus Account 생성
           const mcNexus = await toMultichainNexusAccount({
             chainConfigurations: [
               {
                 chain: walletClient.chain,
-                transport: http(),
+                transport,
                 version: getMEEVersion(MEEVersion.V2_1_0),
               },
             ],
