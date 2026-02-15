@@ -3,8 +3,6 @@ import {
   http,
   createWalletClient,
   createPublicClient,
-  encodeFunctionData,
-  erc20Abi,
   parseUnits,
   getAddress,
 } from 'viem';

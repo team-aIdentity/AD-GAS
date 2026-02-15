@@ -45,8 +45,8 @@ export async function GET(req: NextRequest) {
       log => log.address.toLowerCase() === contractAddress.toLowerCase()
     );
 
-    let transferEvent: any = null;
-    const allEvents: any[] = [];
+    let transferEvent: { from?: string; to?: string; amount?: bigint; token?: string; nonce?: bigint } | null = null;
+    const allEvents: { eventName?: string; args?: unknown; error?: string; rawLog?: unknown }[] = [];
 
     for (const log of logs) {
       try {
@@ -62,10 +62,10 @@ export async function GET(req: NextRequest) {
         if (decoded.eventName === 'SponsoredTransfer') {
           transferEvent = decoded.args;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         // 이벤트 파싱 실패 (다른 이벤트일 수 있음)
         allEvents.push({
-          error: err.message,
+          error: err instanceof Error ? err.message : String(err),
           rawLog: log,
         });
       }
@@ -110,7 +110,8 @@ export async function GET(req: NextRequest) {
       isSponsored: tx.from.toLowerCase() === '0x39f1e010fb6832dbf81da5eb2ff8f631987a212d',
       hasTransferEvent: transferEvent !== null,
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

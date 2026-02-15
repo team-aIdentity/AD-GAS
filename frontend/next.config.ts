@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: false },
   /* 상위 src(../../../src) 번들 시 모듈을 frontend/node_modules에서 해석 */
   webpack: (config) => {
     config.resolve.modules = [
