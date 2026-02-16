@@ -131,13 +131,14 @@ export function ImprovedTransferUI() {
 
       addLog(`📤 트랜잭션 정보: 받는 주소=${transaction.to}, 금액=${formatEther(transaction.value)} ETH`);
 
-      // SDK의 sendTransaction 메서드 호출 (광고 로직 포함)
-      const result = await sdkState.instance.sendTransaction(transaction);
+      // SDK의 sendTransaction 메서드 호출 (광고 로직 포함) — userOpHash 문자열 반환
+      const userOpHash = await sdkState.instance.sendTransaction(transaction);
+      const result: BundlerResponse = { userOpHash };
 
       setTransactionResult(result);
       addLog('🎉 트랜잭션 전송 완료!');
       addLog(`📋 UserOperation Hash: ${result.userOpHash}`);
-      
+
       if (result.bundlerTxHash) {
         addLog(`📋 Bundler Transaction Hash: ${result.bundlerTxHash}`);
       }
