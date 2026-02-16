@@ -1,9 +1,8 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAccount, useSignMessage, useSignTypedData, useConnectorClient } from 'wagmi';
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { GaslessSDK } from '../../../src';
-import { createDynamicSDKConfig } from '../utils/dynamicSDKConfig';
 
 interface AATransactionParams {
   to: string;
@@ -35,10 +34,9 @@ interface AATransactionResult {
 }
 
 export function useAccountAbstractionTransaction() {
-  const { address, connector } = useAccount();
-  const { data: connectorClient } = useConnectorClient();
-  const { signMessageAsync } = useSignMessage();
-  const { signTypedDataAsync } = useSignTypedData();
+  const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -46,81 +44,33 @@ export function useAccountAbstractionTransaction() {
       if (!address) {
         throw new Error('지갑이 연결되지 않았습니다');
       }
+      if (!publicClient || !walletClient) {
+        throw new Error('클라이언트가 준비되지 않았습니다');
+      }
 
-      console.log('🔄 1단계: Account Abstraction 트랜잭션 시작');
+      console.log('🔄 Account Abstraction 트랜잭션 시작');
       console.log('📝 트랜잭션 파라미터:', params);
 
       try {
-        // 1단계: Provider 가져오기
-        if (!connector) {
-          throw new Error('커넥터가 연결되지 않았습니다');
-        }
+        const sdk = await GaslessSDK.initialize({
+          publicClient,
+          walletClient,
+          biconomyApiKey: process.env.NEXT_PUBLIC_BICONOMY_API_KEY!,
+        });
 
-        const provider = await connector.getProvider();
-        console.log('📡 Provider 연결됨:', connector.name);
+        const txHash = await sdk.sendGaslessTransaction({
+          to: params.to as `0x${string}`,
+          value: params.value ?? BigInt(0),
+          data: (params.data as `0x${string}`) || undefined,
+          gasLimit: params.gasLimit,
+        });
 
-        // 2단계: Provider에서 네트워크 정보 가져와서 동적 SDK 설정 생성
-        console.log('🔄 Provider에서 동적 SDK 설정 생성 중...');
-        const dynamicConfig = await createDynamicSDKConfig(provider, address);
-        console.log('✅ 동적 SDK 설정 생성 완료:', dynamicConfig);
-
-        // 3단계: 동적 설정으로 SDK 초기화
-        console.log('🚀 동적 설정으로 SDK 초기화');
-        const sdk = new GaslessSDK(dynamicConfig);
-
-        // 4단계: Wagmi 서명 어댑터 생성
-        const wagmiSigningAdapter = {
-          async getAddress() {
-            return address;
-          },
-          
-          async signMessage(message: string) {
-            console.log('✍️ 메시지 서명 요청:', message.slice(0, 100) + '...');
-            return await signMessageAsync({ message });
-          },
-          
-          async signTypedData(domain: any, types: any, value: any) {
-            console.log('✍️ EIP-712 타입드 데이터 서명 요청');
-            return await signTypedDataAsync({
-              domain,
-              types,
-              primaryType: Object.keys(types).find(key => key !== 'EIP712Domain') || 'Message',
-              message: value,
-            });
-          },
-          
-          async getChainId() {
-            // Provider에서 실제 체인 ID 가져오기
-            const chainIdHex = await provider.request({ method: 'eth_chainId' });
-            return parseInt(chainIdHex, 16);
-          }
-        };
-
-        // 5단계: SDK에 지갑 연결
-        console.log('🔗 5단계: SDK에 지갑 어댑터 연결');
-        await sdk.connectWallet(wagmiSigningAdapter);
-
-        // 6단계: SDK의 sendUserOperationToBundler 메서드 사용 (Provider 직접 전달)
-        console.log('🚀 6단계: SDK를 통한 Account Abstraction 실행');
-        const bundlerResult = await sdk.sendUserOperationToBundler(
-          {
-            to: params.to,
-            value: params.value,
-            data: params.data,
-          },
-          provider, // Provider 직접 전달
-          (step) => {
-            console.log('📊 진행 상황:', step);
-          }
-        );
-        
         console.log('🎉 Account Abstraction 트랜잭션 완료!');
         return {
           success: true,
-          userOpHash: bundlerResult.userOpHash,
-          bundlerTxHash: bundlerResult.bundlerTxHash,
+          userOpHash: txHash,
+          bundlerTxHash: txHash,
         };
-
       } catch (error) {
         console.error('❌ Account Abstraction 트랜잭션 실패:', error);
         return {
