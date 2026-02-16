@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, http, decodeEventLog } from 'viem';
 import { avalanche } from 'viem/chains';
 
 const CONTRACT_ABI = [
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
 
     for (const log of logs) {
       try {
-        const decoded = publicClient.decodeEventLog({
+        const decoded = decodeEventLog({
           abi: CONTRACT_ABI,
           data: log.data,
           topics: log.topics,
