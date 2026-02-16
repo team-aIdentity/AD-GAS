@@ -226,7 +226,8 @@ export function GaslessApp() {
     async (network: Network) => {
       setSelectedNetwork(network);
       try {
-        await switchChainAsync({ chainId: network.chainId });
+        const supportedChainId = network.chainId as 1 | 8453 | 84532 | 43114 | 56;
+        await switchChainAsync({ chainId: supportedChainId });
         toast.success(t('toast.networkSwitched', { name: network.name }));
       } catch {
         toast.error(t('toast.networkSwitchFailed'));
