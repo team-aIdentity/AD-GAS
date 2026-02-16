@@ -98,7 +98,7 @@ export function TransferUI() {
     try {
       const txHash = await sdk.sendTransaction({
         to: transaction.to as `0x${string}`,
-        value: parseInt(transaction.value),
+        value: BigInt(transaction.value),
         data: transaction.data as `0x${string}`,
       });
       alert(`Transaction successful! Hash: ${txHash}`);
