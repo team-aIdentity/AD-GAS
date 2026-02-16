@@ -168,7 +168,7 @@ function getContractAddress(chainId: SupportedChainId): `0x${string}` {
       `해당 체인(${chainId})의 컨트랙트 주소가 설정되어 있지 않습니다. .env.local에 NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_${chainId === 43114 ? 'AVALANCHE' : chainId === 8453 ? 'BASE' : chainId === 56 ? 'BNB' : chainId === 84532 ? 'BASE_SEPOLIA' : 'ETH'}를 설정해주세요.`
     );
   }
-  return getAddress(envKey);
+  return getAddress(envKey) as `0x${string}`;
 }
 
 export async function POST(req: NextRequest) {
