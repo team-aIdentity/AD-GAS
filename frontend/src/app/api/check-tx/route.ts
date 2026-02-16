@@ -98,9 +98,9 @@ export async function GET(req: NextRequest) {
         ? {
             from: transferEvent.from,
             to: transferEvent.to,
-            amount: transferEvent.amount.toString(),
+            amount: transferEvent.amount?.toString() ?? '',
             token: transferEvent.token,
-            nonce: transferEvent.nonce.toString(),
+            nonce: transferEvent.nonce?.toString() ?? '',
             isNative: transferEvent.token === '0x0000000000000000000000000000000000000000',
           }
         : null,
