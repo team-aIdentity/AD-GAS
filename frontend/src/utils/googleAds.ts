@@ -37,7 +37,8 @@ function loadGptScript(): Promise<void> {
     script.src = GPT_SCRIPT_URL;
     script.async = true;
     script.onload = () => {
-      window.googletag = window.googletag || { cmd: [] };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).googletag = (window as any).googletag || { cmd: [] };
       resolve();
     };
     script.onerror = () => reject(new Error('Failed to load GPT script'));
@@ -82,8 +83,8 @@ export function showGoogleRewardedAd(adUnitPath: string): Promise<void> {
         let settled = false;
         const cleanup = () => {
           try {
-            pubads.removeEventListener?.('rewardedSlotGranted', onGranted);
-            pubads.removeEventListener?.('rewardedSlotClosed', onClosed);
+            (pubads as { removeEventListener?: (e: string, fn: () => void) => void }).removeEventListener?.('rewardedSlotGranted', onGranted);
+            (pubads as { removeEventListener?: (e: string, fn: () => void) => void }).removeEventListener?.('rewardedSlotClosed', onClosed);
             googletag!.destroySlots?.([slot]);
           } catch (_) {}
         };
