@@ -23,7 +23,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "viem": ["./node_modules/viem"],
-      "wagmi": ["./node_modules/wagmi"]
+      "wagmi": ["./node_modules/wagmi"],
+      "ethers": ["./node_modules/ethers"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "../src/**/*.ts"],
