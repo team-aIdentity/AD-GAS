@@ -269,6 +269,7 @@ export async function POST(req: NextRequest) {
     if (permitSignature && deadline !== undefined) {
       // Permit 모드: approve 없이 가스리스 전송
       const sig = hexToSignature(permitSignature as `0x${string}`);
+      const permitV = typeof sig.v === 'bigint' ? Number(sig.v) : (sig.v ?? 27);
       txHash = await walletClient.writeContract({
         address: contractAddress,
         abi: SPONSORED_TRANSFER_ABI,
@@ -282,7 +283,7 @@ export async function POST(req: NextRequest) {
           BigInt(nonce),
           signature as `0x${string}`,
           BigInt(deadline),
-          sig.v,
+          permitV,
           sig.r,
           sig.s,
         ],
