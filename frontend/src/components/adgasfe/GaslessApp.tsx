@@ -323,6 +323,9 @@ export function GaslessApp() {
         throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
       }
       const tokenAddress = selectedToken.symbol === 'USDC' ? tokenAddresses.USDC : tokenAddresses.USDT;
+      if (!tokenAddress) {
+        throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
+      }
       const tokenInfo = TOKEN_INFO[selectedToken.symbol];
       const amountUnits = parseUnits(pendingTransaction.amount, tokenInfo.decimals);
 

@@ -1,5 +1,8 @@
-// 체인별 USDC, USDT 컨트랙트 주소
-export const TOKEN_ADDRESSES: Record<number, { USDC: `0x${string}`; USDT: `0x${string}` }> = {
+// 체인별 USDC, USDT 컨트랙트 주소 (USDT가 없는 체인은 USDT 생략)
+export const TOKEN_ADDRESSES: Record<
+  number,
+  { USDC: `0x${string}`; USDT?: `0x${string}` }
+> = {
   // Ethereum Mainnet
   1: {
     USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -10,10 +13,9 @@ export const TOKEN_ADDRESSES: Record<number, { USDC: `0x${string}`; USDT: `0x${s
     USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     USDT: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
   },
-  // Base Sepolia (테스트넷)
+  // Base Sepolia (테스트넷) - USDT 없음, USDC만 지원
   84532: {
-    USDC: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia USDC (테스트넷)
-    USDT: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia에는 USDT가 없을 수 있으므로 USDC 주소 사용 (실제 사용 시 확인 필요)
+    USDC: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   },
   // Avalanche C-Chain
   43114: {
