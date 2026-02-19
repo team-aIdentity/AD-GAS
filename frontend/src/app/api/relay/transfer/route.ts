@@ -255,6 +255,9 @@ export async function POST(req: NextRequest) {
       throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
     }
     const tokenAddress = tokenSymbol === 'USDC' ? tokenAddresses.USDC : tokenAddresses.USDT;
+    if (!tokenAddress) {
+      throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
+    }
     const tokenInfo = TOKEN_INFO[tokenSymbol];
     const amountUnits = parseUnits(amount, tokenInfo.decimals);
 
