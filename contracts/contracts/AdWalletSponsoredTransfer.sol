@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 
 /**
  * @title AdWalletSponsoredTransfer
@@ -112,6 +113,54 @@ contract AdWalletSponsoredTransfer is EIP712 {
             require(allowance >= amount, "Insufficient allowance");
             IERC20(token).safeTransferFrom(from, to, amount);
         }
+
+        emit SponsoredTransfer(from, to, amount, token, nonce);
+    }
+
+    /**
+     * @notice Permit(EIP-2612) 기반 가스리스 전송 - approve 트랜잭션 없이 Permit 서명만으로 전송
+     * @param from 사용자 지갑 주소
+     * @param to 받는 주소
+     * @param amount 전송할 수량
+     * @param token 토큰 주소 (EIP-2612 Permit 지원 토큰만)
+     * @param chainId 체인 ID
+     * @param nonce 사용자 nonce
+     * @param signature 전송 서명
+     * @param deadline Permit 만료 시간
+     * @param permitV Permit 서명 v
+     * @param permitR Permit 서명 r
+     * @param permitS Permit 서명 s
+     */
+    function executeSponsoredTransferWithPermit(
+        address from,
+        address to,
+        uint256 amount,
+        address token,
+        uint256 chainId,
+        uint256 nonce,
+        bytes calldata signature,
+        uint256 deadline,
+        uint8 permitV,
+        bytes32 permitR,
+        bytes32 permitS
+    ) external {
+        require(token != address(0), "Native token use executeSponsoredTransfer");
+        require(nonces[from] == nonce, "Invalid nonce");
+
+        // 서명 검증
+        bytes32 structHash = keccak256(
+            abi.encode(TRANSFER_TYPEHASH, from, to, amount, token, chainId, nonce)
+        );
+        bytes32 hash = _hashTypedDataV4(structHash);
+        address signer = ECDSA.recover(hash, signature);
+        require(signer == from, "Invalid signature");
+
+        nonces[from]++;
+
+        // Permit으로 allowance 설정 (가스리스 - 사용자가 서명만 했음)
+        IERC20Permit(token).permit(from, address(this), amount, deadline, permitV, permitR, permitS);
+
+        IERC20(token).safeTransferFrom(from, to, amount);
 
         emit SponsoredTransfer(from, to, amount, token, nonce);
     }

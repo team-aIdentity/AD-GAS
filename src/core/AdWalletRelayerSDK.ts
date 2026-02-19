@@ -10,6 +10,8 @@ export interface SponsoredTransferRequest {
   chainId: number;
   signature?: string; // EIP-712 서명 (메타트랜잭션용)
   nonce?: number; // 사용자 nonce (메타트랜잭션용)
+  permitSignature?: string; // EIP-2612 Permit 서명 (가스리스 approve)
+  deadline?: number; // Permit 만료 시간 (unix timestamp)
 }
 
 export interface SponsoredTransferResponse {

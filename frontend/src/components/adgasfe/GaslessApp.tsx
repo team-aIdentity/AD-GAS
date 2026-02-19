@@ -23,7 +23,7 @@ import { Toaster } from 'sonner';
 import { toast } from 'sonner';
 import { AdWalletRelayerSDK } from '../../../../src';
 import { SUPPORTED_NETWORKS } from '@/lib/networks';
-import { TOKEN_ADDRESSES, TOKEN_INFO } from '@/lib/tokens';
+import { TOKEN_ADDRESSES, TOKEN_INFO, PERMIT_TOKEN_CONFIG } from '@/lib/tokens';
 import { erc20Abi } from 'viem';
 import type { Network, Token } from '@/types/adgasfe';
 import { Header } from './Header';
@@ -326,7 +326,12 @@ export function GaslessApp() {
       const tokenInfo = TOKEN_INFO[selectedToken.symbol];
       const amountUnits = parseUnits(pendingTransaction.amount, tokenInfo.decimals);
 
-      // ERC20: 컨트랙트에 대한 allowance 체크 및 approve 필요
+      const permitConfig = PERMIT_TOKEN_CONFIG[chainId]?.[selectedToken.symbol as 'USDC' | 'USDT'];
+      const supportsPermit = !!permitConfig;
+
+      let permitSignature: string | undefined;
+      let deadline: number | undefined;
+
       const currentAllowance = await publicClient.readContract({
         address: tokenAddress,
         abi: erc20Abi,
@@ -335,15 +340,55 @@ export function GaslessApp() {
       });
 
       if (currentAllowance < amountUnits) {
-        toast.info(t('toast.tokenApprovalRequest'));
-        const approveHash = await walletClient.writeContract({
-          address: tokenAddress,
-          abi: erc20Abi,
-          functionName: 'approve',
-          args: [contractAddress, maxUint256],
-        });
-        await publicClient.waitForTransactionReceipt({ hash: approveHash });
-        toast.success(t('toast.tokenApproved'));
+        if (supportsPermit) {
+          toast.info('Permit 서명 중... (가스비 없음)');
+          const permitDeadline = Math.floor(Date.now() / 1000) + 60 * 20;
+          const tokenNonce = await publicClient.readContract({
+            address: tokenAddress,
+            abi: [
+              { inputs: [{ name: 'owner', type: 'address' }], name: 'nonces', outputs: [{ type: 'uint256' }], stateMutability: 'view', type: 'function' },
+            ],
+            functionName: 'nonces',
+            args: [address],
+          });
+          permitSignature = await walletClient.signTypedData({
+            domain: {
+              name: permitConfig!.name,
+              version: permitConfig!.version,
+              chainId,
+              verifyingContract: tokenAddress,
+            },
+            types: {
+              Permit: [
+                { name: 'owner', type: 'address' },
+                { name: 'spender', type: 'address' },
+                { name: 'value', type: 'uint256' },
+                { name: 'nonce', type: 'uint256' },
+                { name: 'deadline', type: 'uint256' },
+              ],
+            },
+            primaryType: 'Permit',
+            message: {
+              owner: address,
+              spender: contractAddress,
+              value: amountUnits,
+              nonce: tokenNonce,
+              deadline: BigInt(permitDeadline),
+            },
+          });
+          deadline = permitDeadline;
+          toast.success('Permit 서명 완료');
+        } else {
+          toast.info(t('toast.tokenApprovalRequest'));
+          const approveHash = await walletClient.writeContract({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [contractAddress, maxUint256],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          toast.success(t('toast.tokenApproved'));
+        }
       }
 
       // EIP-712 서명 생성
@@ -400,6 +445,7 @@ export function GaslessApp() {
         chainId,
         signature,
         nonce: Number(nonce),
+        ...(permitSignature && deadline !== undefined && { permitSignature, deadline }),
       });
       console.log('Sponsored transaction hash:', txHash);
       const newCount = getFreeTransactionsUsed() + 1;

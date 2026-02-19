@@ -1,18 +1,58 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   useAccount,
   useConnect,
   useDisconnect,
-  useWalletClient,
-  usePublicClient,
   useReadContract,
+  useSwitchChain,
 } from 'wagmi';
+import { getWalletClient, getPublicClient } from '@wagmi/core';
+import { config } from '@/wagmi.config';
 import { parseEther, formatEther } from 'viem';
 import { toast } from 'sonner';
 import { injected } from 'wagmi/connectors';
 import { useLocale } from '@/contexts/LocaleContext';
+
+// Admin 예치 지원 체인
+const ADMIN_CHAIN_IDS = [1, 8453, 56, 43114, 84532] as const;
+type AdminChainId = (typeof ADMIN_CHAIN_IDS)[number];
+
+const ADMIN_CHAINS = [
+  { chainId: 1, label: 'ETH', nativeToken: 'ETH', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_ETH' as const },
+  { chainId: 8453, label: 'BASE', nativeToken: 'ETH', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE' as const },
+  { chainId: 56, label: 'BNB', nativeToken: 'BNB', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB' as const },
+  { chainId: 43114, label: 'AVAX', nativeToken: 'AVAX', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE' as const },
+  { chainId: 84532, label: 'Base Sepolia', nativeToken: 'ETH', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA' as const },
+] as const;
+
+// Next.js는 process.env.XXX 같은 정적 참조만 빌드 시 인라인함. 동적 키(process.env[key])는 인라인되지 않음.
+function getContractAddress(chainId: number): `0x${string}` | null {
+  let addr: string | undefined;
+  switch (chainId) {
+    case 1:
+      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_ETH;
+      break;
+    case 8453:
+      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE;
+      break;
+    case 56:
+      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB;
+      break;
+    case 43114:
+      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE;
+      break;
+    case 84532:
+      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA;
+      break;
+    default:
+      return null;
+  }
+  if (!addr?.trim()) return null;
+  const trimmed = addr.trim();
+  return (trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`) as `0x${string}`;
+}
 
 const CONTRACT_ABI = [
   {
@@ -50,19 +90,24 @@ export function AdminDepositPage() {
   const { address, isConnected } = useAccount();
   const { connect, status: connectStatus, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
-  const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
+  const { switchChainAsync } = useSwitchChain();
 
+  const [mounted, setMounted] = useState(false);
+  const [selectedChainId, setSelectedChainId] = useState<AdminChainId>(43114); // 기본: AVAX
   const [depositAmount, setDepositAmount] = useState('1');
   const [withdrawAmount, setWithdrawAmount] = useState('0.1');
   const [isDepositing, setIsDepositing] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
+  useEffect(() => setMounted(true), []);
+
   const isConnecting = connectStatus === 'pending';
 
-  // 컨트랙트 주소 (Avalanche)
-  const contractAddress = (process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE ||
-    '0x6750dE99EeCc3077403A2715875736347309EcD3') as `0x${string}`;
+  const selectedChain = useMemo(() => ADMIN_CHAINS.find((c) => c.chainId === selectedChainId), [selectedChainId]);
+  const contractAddress = useMemo(() => getContractAddress(selectedChainId), [selectedChainId]);
+
+  const canReadContract = !!contractAddress;
+  const chainNotDeployed = selectedChain && !contractAddress;
 
   // 관리자 주소 확인
   const {
@@ -70,10 +115,11 @@ export function AdminDepositPage() {
     error: adminError,
     isLoading: isLoadingAdmin,
   } = useReadContract({
-    address: contractAddress,
+    address: contractAddress ?? undefined,
     abi: CONTRACT_ABI,
     functionName: 'admin',
-    query: { enabled: !!contractAddress },
+    chainId: selectedChainId,
+    query: { enabled: canReadContract },
   });
 
   // 공유 풀 잔액 조회
@@ -82,10 +128,11 @@ export function AdminDepositPage() {
     error: poolBalanceError,
     refetch: refetchPoolBalance,
   } = useReadContract({
-    address: contractAddress,
+    address: contractAddress ?? undefined,
     abi: CONTRACT_ABI,
     functionName: 'getNativeDepositPool',
-    query: { enabled: !!contractAddress, refetchInterval: 5000 },
+    chainId: selectedChainId,
+    query: { enabled: canReadContract, refetchInterval: 5000 },
   });
 
   // 관리자 주소 (임시 하드코딩 - 컨트랙트 재배포 전까지 사용)
@@ -146,8 +193,12 @@ export function AdminDepositPage() {
 
   // 예치 함수
   const handleDeposit = useCallback(async () => {
-    if (!walletClient || !publicClient || !address) {
+    if (!address) {
       toast.error(t('toast.connectFirst'));
+      return;
+    }
+    if (!contractAddress || !selectedChain) {
+      toast.error('이 체인은 아직 배포되지 않았습니다.');
       return;
     }
 
@@ -159,8 +210,18 @@ export function AdminDepositPage() {
 
     setIsDepositing(true);
     try {
+      await switchChainAsync({ chainId: selectedChainId });
+
+      const walletClient = await getWalletClient(config);
+      const publicClient = getPublicClient(config, { chainId: selectedChainId });
+      if (!walletClient || !publicClient) {
+        toast.error(t('toast.connectFirst'));
+        return;
+      }
+
       const amountWei = parseEther(depositAmount);
-      toast.info(`${depositAmount} AVAX를 예치합니다...`);
+      const token = selectedChain.nativeToken;
+      toast.info(`${depositAmount} ${token}를 예치합니다...`);
 
       const hash = await walletClient.writeContract({
         address: contractAddress,
@@ -170,30 +231,38 @@ export function AdminDepositPage() {
       });
 
       await publicClient.waitForTransactionReceipt({ hash });
-      toast.success(`${depositAmount} AVAX 예치가 완료되었습니다!`);
+      toast.success(`${depositAmount} ${token} 예치가 완료되었습니다!`);
       setDepositAmount('1');
       refetchPoolBalance();
-    } catch (err: any) {
-      const errorMessage = err?.message || '예치에 실패했습니다.';
-      toast.error(errorMessage);
+    } catch (err: unknown) {
+      let msg = '예치에 실패했습니다.';
+      if (err instanceof Error && typeof err.message === 'string') msg = err.message;
+      else if (typeof err === 'string') msg = err;
+      else if (err && typeof err === 'object' && 'shortMessage' in err && typeof (err as any).shortMessage === 'string') msg = (err as any).shortMessage;
+      toast.error(msg);
       console.error('Deposit error:', err);
     } finally {
       setIsDepositing(false);
     }
   }, [
-    walletClient,
-    publicClient,
     address,
     depositAmount,
     contractAddress,
+    selectedChain,
+    selectedChainId,
+    switchChainAsync,
     refetchPoolBalance,
     t,
   ]);
 
   // 출금 함수
   const handleWithdraw = useCallback(async () => {
-    if (!walletClient || !publicClient || !address) {
+    if (!address) {
       toast.error(t('toast.connectFirst'));
+      return;
+    }
+    if (!contractAddress || !selectedChain) {
+      toast.error('이 체인은 아직 배포되지 않았습니다.');
       return;
     }
 
@@ -205,8 +274,18 @@ export function AdminDepositPage() {
 
     setIsWithdrawing(true);
     try {
+      await switchChainAsync({ chainId: selectedChainId });
+
+      const walletClient = await getWalletClient(config);
+      const publicClient = getPublicClient(config, { chainId: selectedChainId });
+      if (!walletClient || !publicClient) {
+        toast.error(t('toast.connectFirst'));
+        return;
+      }
+
       const amountWei = parseEther(withdrawAmount);
-      toast.info(`${withdrawAmount} AVAX를 출금합니다...`);
+      const token = selectedChain.nativeToken;
+      toast.info(`${withdrawAmount} ${token}를 출금합니다...`);
 
       const hash = await walletClient.writeContract({
         address: contractAddress,
@@ -216,28 +295,32 @@ export function AdminDepositPage() {
       });
 
       await publicClient.waitForTransactionReceipt({ hash });
-      toast.success(`${withdrawAmount} AVAX 출금이 완료되었습니다!`);
+      toast.success(`${withdrawAmount} ${token} 출금이 완료되었습니다!`);
       setWithdrawAmount('0.1');
       refetchPoolBalance();
-    } catch (err: any) {
-      const errorMessage = err?.message || '출금에 실패했습니다.';
-      toast.error(errorMessage);
+    } catch (err: unknown) {
+      let msg = '출금에 실패했습니다.';
+      if (err instanceof Error && typeof err.message === 'string') msg = err.message;
+      else if (typeof err === 'string') msg = err;
+      else if (err && typeof err === 'object' && 'shortMessage' in err && typeof (err as any).shortMessage === 'string') msg = (err as any).shortMessage;
+      toast.error(msg);
       console.error('Withdraw error:', err);
     } finally {
       setIsWithdrawing(false);
     }
   }, [
-    walletClient,
-    publicClient,
     address,
     withdrawAmount,
     contractAddress,
+    selectedChain,
+    selectedChainId,
+    switchChainAsync,
     refetchPoolBalance,
     t,
   ]);
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white">
+    <div className="relative z-[1] min-h-screen bg-[#0f172a] text-white">
       <div className="max-w-4xl mx-auto px-6 py-12">
         <div className="mb-8">
           <h1 className="text-3xl font-extrabold mb-2">{t('admin.title')}</h1>
@@ -353,7 +436,7 @@ export function AdminDepositPage() {
                       현재 컨트랙트가 이전 버전일 수 있습니다. 관리자 기능을 사용하려면 새 버전의
                       컨트랙트를 배포해야 합니다.
                     </p>
-                    <p className="mt-1 font-mono text-xs">컨트랙트 주소: {contractAddress}</p>
+                    <p className="mt-1 font-mono text-xs">컨트랙트 주소: {contractAddress ?? '(미설정)'}</p>
                   </div>
                 </div>
               ) : isAdmin ? (
@@ -388,10 +471,47 @@ export function AdminDepositPage() {
           )}
         </div>
 
+        {/* 체인 선택 */}
+        <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-6 mb-6">
+          <p className="text-sm text-[#94a3b8] mb-3">예치할 체인 선택</p>
+          <div className="flex flex-wrap gap-2">
+            {ADMIN_CHAINS.map((c) => {
+              const hasContract = mounted ? !!getContractAddress(c.chainId) : true;
+              const isSelected = selectedChainId === c.chainId;
+              return (
+                <button
+                  key={c.chainId}
+                  type="button"
+                  onClick={() => setSelectedChainId(c.chainId)}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-blue-500/30 border border-blue-400 text-white'
+                      : hasContract
+                        ? 'bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.15)] hover:border-blue-500/50 text-[#94a3b8]'
+                        : 'bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.15)] hover:border-blue-500/50 text-[#64748b]'
+                  }`}
+                >
+                  {c.label}
+                  {!hasContract && mounted && <span className="ml-1 text-xs opacity-75">(미배포)</span>}
+                </button>
+              );
+            })}
+          </div>
+          {chainNotDeployed && (
+            <p className="text-amber-400/90 text-sm mt-3">
+              ⚠️ {selectedChain?.label} 체인은 아직 컨트랙트가 배포되지 않았습니다. 다른 체인을 선택하세요.
+            </p>
+          )}
+        </div>
+
         {/* 예치 풀 잔액 */}
         <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-6 mb-6">
-          <p className="text-sm text-[#94a3b8] mb-2">공유 예치 풀 잔액</p>
-          {poolBalanceError ? (
+          <p className="text-sm text-[#94a3b8] mb-2">
+            공유 예치 풀 잔액 ({selectedChain?.label})
+          </p>
+          {!contractAddress ? (
+            <p className="text-amber-400/90">이 체인은 아직 배포되지 않았습니다.</p>
+          ) : poolBalanceError ? (
             <div className="space-y-2">
               <p className="text-red-400">⚠️ 풀 잔액을 읽을 수 없습니다</p>
               <p className="text-xs text-[#64748b]">에러: {poolBalanceError.message}</p>
@@ -402,7 +522,7 @@ export function AdminDepositPage() {
           ) : (
             <>
               <p className="text-3xl font-extrabold">
-                {poolBalance !== undefined ? formatEther(poolBalance) : '0'} AVAX
+                {poolBalance !== undefined ? formatEther(poolBalance) : '0'} {selectedChain?.nativeToken ?? ''}
               </p>
               <p className="text-xs text-[#64748b] mt-2">
                 {poolBalance !== undefined && poolBalance <= parseEther('0.001')
@@ -437,11 +557,11 @@ export function AdminDepositPage() {
         {/* 예치 섹션 */}
         {isConnected && (
           <>
-            <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-6 mb-6">
-              <h2 className="text-xl font-bold mb-4">예치</h2>
+            <div className="relative z-10 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-6 mb-6">
+              <h2 className="text-xl font-bold mb-4">예치 ({selectedChain?.label})</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-[#94a3b8] mb-2">예치할 금액 (AVAX)</label>
+                  <label className="block text-sm text-[#94a3b8] mb-2">예치할 금액 ({selectedChain?.nativeToken ?? '토큰'})</label>
                   <input
                     type="number"
                     step="0.001"
@@ -452,22 +572,24 @@ export function AdminDepositPage() {
                     placeholder="1.0"
                   />
                 </div>
-                <button
-                  onClick={handleDeposit}
-                  disabled={isDepositing || !isConnected}
-                  className="w-full py-3 rounded-xl bg-gradient-to-b from-green-600 to-green-700 border border-green-500/30 hover:from-green-500 hover:to-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-bold"
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); if (!isDepositing) handleDeposit(); }}
+                  onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isDepositing) { e.preventDefault(); handleDeposit(); } }}
+                  className={`w-full py-3 rounded-xl bg-gradient-to-b from-green-600 to-green-700 border border-green-500/30 text-center font-bold cursor-pointer select-none transition-all hover:from-green-500 hover:to-green-600 active:scale-[0.98] ${isDepositing ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                 >
                   {isDepositing ? '예치 중...' : '예치하기'}
-                </button>
+                </div>
               </div>
             </div>
 
             {/* 출금 섹션 */}
-            <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-6">
-              <h2 className="text-xl font-bold mb-4">출금</h2>
+            <div className="relative z-10 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-2xl p-6">
+              <h2 className="text-xl font-bold mb-4">출금 ({selectedChain?.label})</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-[#94a3b8] mb-2">출금할 금액 (AVAX)</label>
+                  <label className="block text-sm text-[#94a3b8] mb-2">출금할 금액 ({selectedChain?.nativeToken ?? '토큰'})</label>
                   <input
                     type="number"
                     step="0.001"
@@ -478,13 +600,15 @@ export function AdminDepositPage() {
                     placeholder="0.1"
                   />
                 </div>
-                <button
-                  onClick={handleWithdraw}
-                  disabled={isWithdrawing || !isConnected}
-                  className="w-full py-3 rounded-xl bg-gradient-to-b from-red-600 to-red-700 border border-red-500/30 hover:from-red-500 hover:to-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-bold"
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); if (!isWithdrawing) handleWithdraw(); }}
+                  onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isWithdrawing) { e.preventDefault(); handleWithdraw(); } }}
+                  className={`w-full py-3 rounded-xl bg-gradient-to-b from-red-600 to-red-700 border border-red-500/30 text-center font-bold cursor-pointer select-none transition-all hover:from-red-500 hover:to-red-600 active:scale-[0.98] ${isWithdrawing ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                 >
                   {isWithdrawing ? '출금 중...' : '출금하기'}
-                </button>
+                </div>
               </div>
             </div>
           </>

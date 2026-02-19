@@ -5,12 +5,13 @@ import {
   createPublicClient,
   parseUnits,
   getAddress,
+  hexToSignature,
 } from 'viem';
 import { mainnet, base, avalanche, bsc, baseSepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { TOKEN_ADDRESSES, TOKEN_INFO } from '@/lib/tokens';
 
-// 컨트랙트 ABI (executeSponsoredTransfer 함수만)
+// 컨트랙트 ABI
 const SPONSORED_TRANSFER_ABI = [
   {
     inputs: [
@@ -23,6 +24,25 @@ const SPONSORED_TRANSFER_ABI = [
       { name: 'signature', type: 'bytes' },
     ],
     name: 'executeSponsoredTransfer',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'token', type: 'address' },
+      { name: 'chainId', type: 'uint256' },
+      { name: 'nonce', type: 'uint256' },
+      { name: 'signature', type: 'bytes' },
+      { name: 'deadline', type: 'uint256' },
+      { name: 'permitV', type: 'uint8' },
+      { name: 'permitR', type: 'bytes32' },
+      { name: 'permitS', type: 'bytes32' },
+    ],
+    name: 'executeSponsoredTransferWithPermit',
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function',
@@ -47,6 +67,8 @@ interface RelayBody {
   chainId: SupportedChainId;
   signature?: string; // EIP-712 서명 (메타트랜잭션용)
   nonce?: number; // 사용자 nonce
+  permitSignature?: string; // Permit 서명 (가스리스 approve)
+  deadline?: number; // Permit 만료 시간 (unix timestamp)
 }
 
 // 메모리 기반 1일 5회 제한 (from 주소 기준)
@@ -174,7 +196,8 @@ function getContractAddress(chainId: SupportedChainId): `0x${string}` {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as RelayBody;
-    const { from, to, amount, tokenSymbol, chainId, signature, nonce } = body;
+    const { from, to, amount, tokenSymbol, chainId, signature, nonce, permitSignature, deadline } =
+      body;
 
     if (!from || !to || !amount || !tokenSymbol || !chainId) {
       return NextResponse.json({ error: '필수 필드가 누락되었습니다.' }, { status: 400 });
@@ -184,6 +207,15 @@ export async function POST(req: NextRequest) {
     if (!signature || nonce === undefined) {
       return NextResponse.json(
         { error: '메타트랜잭션 모드: 서명(signature)과 nonce가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    // Permit 모드: permitSignature과 deadline 함께 필수
+    const usePermit = permitSignature && deadline !== undefined;
+    if ((permitSignature && deadline === undefined) || (!permitSignature && deadline !== undefined)) {
+      return NextResponse.json(
+        { error: 'Permit 모드: permitSignature과 deadline이 함께 필요합니다.' },
         { status: 400 }
       );
     }
@@ -232,21 +264,45 @@ export async function POST(req: NextRequest) {
       transport: http(rpcUrl),
     });
 
-    // 컨트랙트 호출: executeSponsoredTransfer
-    const txHash = await walletClient.writeContract({
-      address: contractAddress,
-      abi: SPONSORED_TRANSFER_ABI,
-      functionName: 'executeSponsoredTransfer',
-      args: [
-        from,
-        to,
-        amountUnits,
-        tokenAddress,
-        BigInt(chainId),
-        BigInt(nonce),
-        signature as `0x${string}`,
-      ],
-    });
+    let txHash: `0x${string}`;
+
+    if (permitSignature && deadline !== undefined) {
+      // Permit 모드: approve 없이 가스리스 전송
+      const sig = hexToSignature(permitSignature as `0x${string}`);
+      txHash = await walletClient.writeContract({
+        address: contractAddress,
+        abi: SPONSORED_TRANSFER_ABI,
+        functionName: 'executeSponsoredTransferWithPermit',
+        args: [
+          from,
+          to,
+          amountUnits,
+          tokenAddress,
+          BigInt(chainId),
+          BigInt(nonce),
+          signature as `0x${string}`,
+          BigInt(deadline),
+          sig.v,
+          sig.r,
+          sig.s,
+        ],
+      });
+    } else {
+      txHash = await walletClient.writeContract({
+        address: contractAddress,
+        abi: SPONSORED_TRANSFER_ABI,
+        functionName: 'executeSponsoredTransfer',
+        args: [
+          from,
+          to,
+          amountUnits,
+          tokenAddress,
+          BigInt(chainId),
+          BigInt(nonce),
+          signature as `0x${string}`,
+        ],
+      });
+    }
 
     return NextResponse.json({ txHash });
   } catch (error) {
