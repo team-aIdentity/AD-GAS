@@ -16,9 +16,12 @@ interface ClientsState {
  * @returns {ClientsState} 클라이언트 상태 정보
  */
 export function useWagmiClients(): ClientsState {
-  const { isConnected, address } = useAccount();
+  const { address, status: accountStatus } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient, isLoading: isWalletClientLoading, error: walletClientError } = useWalletClient();
+
+  // 재연결 중에는 캐시된 주소로 클라이언트를 쓰지 않음 (실제 연결됐을 때만)
+  const isConnected = accountStatus === 'connected' && !!address;
 
   const [state, setState] = useState<ClientsState>({
     publicClient: null,
@@ -29,7 +32,7 @@ export function useWagmiClients(): ClientsState {
   });
 
   useEffect(() => {
-    // 연결되지 않은 상태
+    // 연결되지 않은 상태 (reconnecting 중에는 준비 안 함)
     if (!isConnected || !address) {
       setState({
         publicClient: null,

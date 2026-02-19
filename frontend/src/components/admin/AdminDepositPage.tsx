@@ -87,7 +87,9 @@ const CONTRACT_ABI = [
 
 export function AdminDepositPage() {
   const { t } = useLocale();
-  const { address, isConnected } = useAccount();
+  const { address, status: accountStatus } = useAccount();
+  // 재연결 중에는 연결된 것처럼 보이지 않도록
+  const isConnected = accountStatus === 'connected' && !!address;
   const { connect, status: connectStatus, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();

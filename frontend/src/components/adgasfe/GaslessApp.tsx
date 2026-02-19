@@ -77,7 +77,9 @@ function getFreeTransactionsUsed(): number {
 
 export function GaslessApp() {
   const { t } = useLocale();
-  const { isConnected, address } = useAccount();
+  const { address, status: accountStatus } = useAccount();
+  // 재연결(reconnecting) 중에는 캐시된 주소가 보이지 않도록, 실제 연결됐을 때만 연결 상태 표시
+  const isConnected = accountStatus === 'connected' && !!address;
   const { connectors, connect, status: connectStatus } = useConnect();
   const { disconnect } = useDisconnect();
 
@@ -273,7 +275,12 @@ export function GaslessApp() {
           break;
       }
       if (!contractAddress) {
-        throw new Error(`체인 ${chainId}의 컨트랙트 주소가 설정되지 않았습니다.`);
+        setIsTransacting(false);
+        setShowTransactionModal(false);
+        toast.error(
+          `이 네트워크에서는 서비스를 사용할 수 없습니다. (체인 ${chainId} 컨트랙트 미설정)`
+        );
+        return;
       }
 
       // 컨트랙트 코드 존재 여부 확인

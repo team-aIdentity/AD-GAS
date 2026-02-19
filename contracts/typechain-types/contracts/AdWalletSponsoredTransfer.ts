@@ -30,6 +30,7 @@ export interface AdWalletSponsoredTransferInterface extends Interface {
       | "depositNative"
       | "eip712Domain"
       | "executeSponsoredTransfer"
+      | "executeSponsoredTransferWithPermit"
       | "getNativeDepositPool"
       | "nativeDepositPool"
       | "nonces"
@@ -65,6 +66,22 @@ export interface AdWalletSponsoredTransferInterface extends Interface {
     ]
   ): string;
   encodeFunctionData(
+    functionFragment: "executeSponsoredTransferWithPermit",
+    values: [
+      AddressLike,
+      AddressLike,
+      BigNumberish,
+      AddressLike,
+      BigNumberish,
+      BigNumberish,
+      BytesLike,
+      BigNumberish,
+      BigNumberish,
+      BytesLike,
+      BytesLike
+    ]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getNativeDepositPool",
     values?: undefined
   ): string;
@@ -89,6 +106,10 @@ export interface AdWalletSponsoredTransferInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "executeSponsoredTransfer",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "executeSponsoredTransferWithPermit",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -234,6 +255,24 @@ export interface AdWalletSponsoredTransfer extends BaseContract {
     "nonpayable"
   >;
 
+  executeSponsoredTransferWithPermit: TypedContractMethod<
+    [
+      from: AddressLike,
+      to: AddressLike,
+      amount: BigNumberish,
+      token: AddressLike,
+      chainId: BigNumberish,
+      nonce: BigNumberish,
+      signature: BytesLike,
+      deadline: BigNumberish,
+      permitV: BigNumberish,
+      permitR: BytesLike,
+      permitS: BytesLike
+    ],
+    [void],
+    "nonpayable"
+  >;
+
   getNativeDepositPool: TypedContractMethod<[], [bigint], "view">;
 
   nativeDepositPool: TypedContractMethod<[], [bigint], "view">;
@@ -284,6 +323,25 @@ export interface AdWalletSponsoredTransfer extends BaseContract {
       chainId: BigNumberish,
       nonce: BigNumberish,
       signature: BytesLike
+    ],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "executeSponsoredTransferWithPermit"
+  ): TypedContractMethod<
+    [
+      from: AddressLike,
+      to: AddressLike,
+      amount: BigNumberish,
+      token: AddressLike,
+      chainId: BigNumberish,
+      nonce: BigNumberish,
+      signature: BytesLike,
+      deadline: BigNumberish,
+      permitV: BigNumberish,
+      permitR: BytesLike,
+      permitS: BytesLike
     ],
     [void],
     "nonpayable"

@@ -12,6 +12,8 @@ export type { IERC1363 } from "./@openzeppelin/contracts/interfaces/IERC1363";
 export { IERC1363__factory } from "./factories/@openzeppelin/contracts/interfaces/IERC1363__factory";
 export type { IERC5267 } from "./@openzeppelin/contracts/interfaces/IERC5267";
 export { IERC5267__factory } from "./factories/@openzeppelin/contracts/interfaces/IERC5267__factory";
+export type { IERC20Permit } from "./@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit";
+export { IERC20Permit__factory } from "./factories/@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit__factory";
 export type { IERC20 } from "./@openzeppelin/contracts/token/ERC20/IERC20";
 export { IERC20__factory } from "./factories/@openzeppelin/contracts/token/ERC20/IERC20__factory";
 export type { SafeERC20 } from "./@openzeppelin/contracts/token/ERC20/utils/SafeERC20";
