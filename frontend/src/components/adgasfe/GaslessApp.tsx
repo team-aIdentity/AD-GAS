@@ -42,6 +42,19 @@ import { useLocale } from '@/contexts/LocaleContext';
 
 const DAILY_LIMIT = 5;
 
+function detectMobileLayout(): boolean {
+  if (typeof navigator !== 'undefined') {
+    const ua = navigator.userAgent || '';
+    if (/android/i.test(ua) || /iphone|ipad|ipod/i.test(ua)) {
+      return true;
+    }
+  }
+  if (typeof window !== 'undefined') {
+    return window.innerWidth < 1024;
+  }
+  return false;
+}
+
 function getErrorKey(error: Error): string {
   const msg = error.message.toLowerCase();
   if (
@@ -129,10 +142,13 @@ export function GaslessApp() {
   }, []);
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(typeof window !== 'undefined' && window.innerWidth < 768);
+    const checkMobile = () => setIsMobile(detectMobileLayout());
     checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }
+    return () => {};
   }, []);
 
   const chainId = walletClient?.chain?.id;
