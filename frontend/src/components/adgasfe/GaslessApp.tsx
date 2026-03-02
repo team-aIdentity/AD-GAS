@@ -353,7 +353,7 @@ export function GaslessApp() {
       const amountUnits = parseUnits(pendingTransaction.amount, tokenInfo.decimals);
 
       const permitConfig = PERMIT_TOKEN_CONFIG[chainId]?.[selectedToken.symbol as 'USDC' | 'USDT'];
-      const supportsPermit = !!permitConfig;
+      const supportsPermit = !!permitConfig && !isMobile;
 
       let permitSignature: string | undefined;
       let deadline: number | undefined;
@@ -542,6 +542,7 @@ export function GaslessApp() {
     walletClient,
     publicClient,
     currentNetwork.name,
+    isMobile,
   ]);
 
   const handleAdSkip = useCallback(() => {
