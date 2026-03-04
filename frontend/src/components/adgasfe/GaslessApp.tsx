@@ -151,6 +151,16 @@ export function GaslessApp() {
     return () => {};
   }, []);
 
+  // 앱(Capacitor WebView)에서 열렸을 때만 AdMob 초기화
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const cap = (window as unknown as { Capacitor?: unknown }).Capacitor;
+    if (!cap) return;
+    import('@capacitor-community/admob')
+      .then((m) => m.AdMob.initialize())
+      .catch(() => {});
+  }, []);
+
   const chainId = walletClient?.chain?.id;
   const currentNetwork =
     SUPPORTED_NETWORKS.find(n => n.chainId === chainId) ?? SUPPORTED_NETWORKS[1];
