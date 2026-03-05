@@ -56,7 +56,7 @@
 | **SDK** | TypeScript, Viem, (Biconomy AbstractJS / self-hosted Relayer) | Gasless, points, and swap calls from wallet/dApp |
 | **Frontend** | Next.js 15, React 19, wagmi, Tailwind CSS | Web demo, admin, points/swap UI |
 | **Mobile app** | Capacitor 6, WebView + ad-gas.vercel.app | Android/iOS native shell, AdMob integration |
-| **Wallet integration** | WalletConnect, MetaMask, Trust Wallet, OKX Wallet | Multi-wallet and mobile support |
+| **Wallet integration** | WalletConnect, MetaMask, Rainbow Wallet | Multi-wallet and mobile support. Permit (gasless approve) requires eth_signTypedData_v4 support (e.g. MetaMask, Rainbow) |
 | **Infrastructure** | Public RPC, Relayer server, (optional) Bundler/MEE | Tx relay, ad verification, point mint |
 
 ### Architecture Design Decisions

@@ -1,9 +1,9 @@
 import { http, createConfig } from 'wagmi'
 import { mainnet, base, baseSepolia, avalanche, bsc } from 'wagmi/chains'
-import { metaMask, walletConnect } from 'wagmi/connectors'
+import { injected, metaMask, walletConnect } from 'wagmi/connectors'
 
 // 지원 체인: 이더리움 메인넷 / Base 메인넷 / Base Sepolia / Avalanche / BNB (5개)
-// WalletConnect: Trust Wallet, OKX Wallet 등 모바일 지갑 연결용 (https://cloud.walletconnect.com 에서 발급)
+// MetaMask, injected(Rainbow Wallet 등 브라우저 확장), WalletConnect(모바일/기타 지갑) (https://cloud.walletconnect.com 에서 projectId 발급)
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
 
 const RPC_URLS: Record<number, string> = {
@@ -16,8 +16,8 @@ const RPC_URLS: Record<number, string> = {
 
 export const config = createConfig({
   chains: [mainnet, base, baseSepolia, avalanche, bsc],
-  // MetaMask + WalletConnect(Trust Wallet, OKX Wallet 등)
-  connectors: [metaMask(), walletConnect({ projectId })],
+  // MetaMask + injected(Rainbow 등) + WalletConnect
+  connectors: [metaMask(), injected(), walletConnect({ projectId })],
   transports: {
     [mainnet.id]: http(RPC_URLS[mainnet.id]),
     [base.id]: http(RPC_URLS[base.id]),
