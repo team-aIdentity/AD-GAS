@@ -30,25 +30,26 @@ export const TOKEN_ADDRESSES: Record<
 };
 
 // EIP-2612 Permit 지원 토큰 설정 (체인ID: { USDC?: { name, version }, USDT?: { name, version } })
+// name/version은 토큰 컨트랙트의 EIP-712 domain과 일치해야 함. Circle USDC는 name() = "USD Coin", version "2"
 // 미설정 시 approve 트랜잭션 사용 (사용자 가스비 부담)
 export const PERMIT_TOKEN_CONFIG: Record<
   number,
   { USDC?: { name: string; version: string }; USDT?: { name: string; version: string } }
 > = {
   1: {
-    USDC: { name: 'USDC', version: '2' }, // Circle USDC Ethereum Mainnet
+    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Ethereum Mainnet
   },
   8453: {
-    USDC: { name: 'USDC', version: '2' }, // Circle USDC Base Mainnet
+    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Base Mainnet
   },
   56: {
-    USDC: { name: 'USDC', version: '2' }, // Circle USDC BNB Chain
+    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC BNB Chain
   },
   43114: {
-    USDC: { name: 'USDC', version: '2' }, // Circle USDC Avalanche C-Chain
+    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Avalanche C-Chain
   },
   84532: {
-    USDC: { name: 'USDC', version: '2' }, // Circle USDC Base Sepolia
+    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Base Sepolia
   },
 };
 
