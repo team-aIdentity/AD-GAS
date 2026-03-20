@@ -16,8 +16,8 @@ const RPC_URLS: Record<number, string> = {
 
 export const config = createConfig({
   chains: [mainnet, base, baseSepolia, avalanche, bsc],
-  // MetaMask + injected(Rainbow 등) + WalletConnect
-  connectors: [metaMask(), injected(), walletConnect({ projectId })],
+  // WalletConnect를 앞에 두면 모바일/앱에서 첫 옵션이 됨 (WebView에는 주입 지갑 없음)
+  connectors: [walletConnect({ projectId }), metaMask(), injected()],
   transports: {
     [mainnet.id]: http(RPC_URLS[mainnet.id]),
     [base.id]: http(RPC_URLS[base.id]),

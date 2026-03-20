@@ -18,6 +18,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'AD GAS — Gasless SDK',
   description: 'Watch ads, send without gas. Gasless SDK Next.js app.',
+  icons: {
+    icon: [{ url: '/logo.png', type: 'image/png' }],
+    apple: '/logo.png',
+  },
 };
 
 export const viewport: Viewport = {

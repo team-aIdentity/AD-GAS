@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { svgPaths } from '@/lib/svgPaths';
 import { SUPPORTED_NETWORKS } from '@/lib/networks';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -7,10 +8,15 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 function Logo() {
   return (
-    <div className="bg-[rgba(255,255,255,0.08)] content-stretch flex items-center justify-center relative rounded-[12px] shrink-0 size-[40px] border border-[rgba(99,102,241,0.5)] shadow-[0px_6px_24px_0px_rgba(99,102,241,0.25)]">
-      <p className="font-semibold leading-[26.4px] not-italic relative shrink-0 text-[22px] text-white">
-        🚀
-      </p>
+    <div className="relative size-[40px] shrink-0 overflow-hidden rounded-[12px] border border-[rgba(99,102,241,0.5)] bg-[rgba(255,255,255,0.06)] shadow-[0px_6px_24px_0px_rgba(99,102,241,0.25)]">
+      <Image
+        src="/logo.png"
+        alt="AD GAS"
+        width={40}
+        height={40}
+        className="size-full object-cover"
+        priority
+      />
     </div>
   );
 }

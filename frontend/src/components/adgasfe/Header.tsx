@@ -14,8 +14,8 @@ function Logo() {
       <div className="relative shrink-0 size-[30px]">
         <img
           alt="AD GAS Logo"
-          className="object-cover pointer-events-none size-full"
-          src="/images/logo.png"
+          className="pointer-events-none size-full object-cover"
+          src="/logo.png"
         />
       </div>
     </div>
