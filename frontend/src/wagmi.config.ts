@@ -3,8 +3,14 @@ import { mainnet, base, baseSepolia, avalanche, bsc } from 'wagmi/chains'
 import { injected, metaMask, walletConnect } from 'wagmi/connectors'
 
 // 지원 체인: 이더리움 메인넷 / Base 메인넷 / Base Sepolia / Avalanche / BNB (5개)
-// MetaMask, injected(Rainbow Wallet 등 브라우저 확장), WalletConnect(모바일/기타 지갑) (https://cloud.walletconnect.com 에서 projectId 발급)
+// MetaMask SDK: 모바일/WebView에서 딥링크로 MetaMask 앱 연결 (dappMetadata.url 필수에 가깝게 설정)
+// WalletConnect: https://cloud.walletconnect.com projectId
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
+
+const dappMetadataUrl =
+  (process.env.NEXT_PUBLIC_APP_URL?.trim() && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
+  (process.env.VERCEL_URL?.trim() && `https://${process.env.VERCEL_URL.trim()}`) ||
+  'https://ad-gas.vercel.app'
 
 const RPC_URLS: Record<number, string> = {
   [mainnet.id]: process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://eth.llamarpc.com',
@@ -16,8 +22,18 @@ const RPC_URLS: Record<number, string> = {
 
 export const config = createConfig({
   chains: [mainnet, base, baseSepolia, avalanche, bsc],
-  // WalletConnect를 앞에 두면 모바일/앱에서 첫 옵션이 됨 (WebView에는 주입 지갑 없음)
-  connectors: [walletConnect({ projectId }), metaMask(), injected()],
+  // MetaMask 먼저(모바일 딥링크) → WC(다른 지갑) → 브라우저 주입
+  connectors: [
+    metaMask({
+      dappMetadata: {
+        name: 'AD GAS',
+        url: dappMetadataUrl,
+      },
+      useDeeplink: true,
+    }),
+    walletConnect({ projectId }),
+    injected(),
+  ],
   transports: {
     [mainnet.id]: http(RPC_URLS[mainnet.id]),
     [base.id]: http(RPC_URLS[base.id]),

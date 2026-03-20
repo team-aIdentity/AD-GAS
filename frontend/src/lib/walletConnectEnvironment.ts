@@ -1,11 +1,15 @@
 import type { Connector } from 'wagmi';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 
+const METAMASK_ID = 'metaMaskSDK';
+const WALLETCONNECT_ID = 'walletConnect';
+const INJECTED_ID = 'injected';
+
 /**
- * Capacitor WebView·모바일 브라우저 등 `window.ethereum`이 없는 환경.
- * 이 경우 MetaMask/injected 커넥터는 동작하지 않고 WalletConnect만 사용 가능합니다.
+ * Capacitor WebView·모바일 브라우저 등 `window.ethereum` 주입이 없는 환경.
+ * 여기서는 MetaMask SDK 딥링크(앱 실행) + WalletConnect(보조)만 의미가 있습니다.
  */
-export function shouldUseWalletConnectOnly(): boolean {
+export function isNonInjectedWalletContext(): boolean {
   if (typeof window === 'undefined') return false;
   if (isCapacitorNativeApp()) return true;
   const eth = (window as typeof window & { ethereum?: unknown }).ethereum;
@@ -14,20 +18,29 @@ export function shouldUseWalletConnectOnly(): boolean {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
-/** 네이티브 앱·무주입 모바일: WalletConnect만 노출 (MetaMask 앱은 WC 경유) */
+/** 주입 불가 환경에서는 Injected 제거 (동작하지 않음) */
 export function filterConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
-  if (!shouldUseWalletConnectOnly()) return connectors;
-  const wcOnly = connectors.filter(c => c.id === 'walletConnect');
-  return wcOnly.length > 0 ? wcOnly : connectors;
+  if (!isNonInjectedWalletContext()) return connectors;
+  const allowed = new Set([METAMASK_ID, WALLETCONNECT_ID]);
+  const filtered = connectors.filter(c => allowed.has(c.id));
+  return filtered.length > 0 ? filtered : connectors;
 }
 
-/** 모바일 브라우저 등에서는 WalletConnect 버튼을 위로 (주입 지갑이 있으면 순서 유지) */
+/**
+ * MetaMask(앱 딥링크) → WalletConnect → Injected 순 (주입 가능한 데스크톱은 MetaMask → Injected → WC)
+ */
 export function orderConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   const base = filterConnectorsForEnvironment(connectors);
-  if (shouldUseWalletConnectOnly()) return base;
-  const wc = base.filter(c => c.id === 'walletConnect');
-  const rest = base.filter(c => c.id !== 'walletConnect');
-  return [...wc, ...rest];
+  const mm = base.filter(c => c.id === METAMASK_ID);
+  const wc = base.filter(c => c.id === WALLETCONNECT_ID);
+  const inj = base.filter(c => c.id === INJECTED_ID);
+  const other = base.filter(
+    c => c.id !== METAMASK_ID && c.id !== WALLETCONNECT_ID && c.id !== INJECTED_ID
+  );
+  if (isNonInjectedWalletContext()) {
+    return [...mm, ...wc, ...other];
+  }
+  return [...mm, ...inj, ...wc, ...other];
 }
 
 export function isWalletConnectProjectConfigured(): boolean {
