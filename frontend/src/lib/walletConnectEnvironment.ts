@@ -16,14 +16,14 @@ export function isNonInjectedWalletContext(): boolean {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
-/** MetaMask만 지원: 주입 불가 환경에서는 MetaMask SDK(딥링크)만 노출 */
+/** 주입 불가 환경에서는 MetaMask SDK만 (Injected 제외) */
 export function filterConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   if (!isNonInjectedWalletContext()) return connectors;
   const mm = connectors.filter(c => c.id === METAMASK_ID);
   return mm.length > 0 ? mm : connectors;
 }
 
-/** MetaMask → Injected(브라우저 확장 등) */
+/** MetaMask SDK → Injected */
 export function orderConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   const base = filterConnectorsForEnvironment(connectors);
   const mm = base.filter(c => c.id === METAMASK_ID);

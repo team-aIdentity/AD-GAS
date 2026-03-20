@@ -5,7 +5,7 @@ import type { Connector, UseConnectReturnType } from 'wagmi';
 import { config } from '@/wagmi.config';
 import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
-import { isNonInjectedWalletContext, orderConnectorsForEnvironment } from '@/lib/walletConnectEnvironment';
+import { orderConnectorsForEnvironment } from '@/lib/walletConnectEnvironment';
 
 /** 프로젝트 `Register.config`와 동일한 Connect 뮤테이션 타입 (기본 `Config`와 불일치 방지) */
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
@@ -47,11 +47,6 @@ export function WalletConnectModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl border border-[rgba(255,255,255,0.08)] bg-[#1e293b] p-6">
         <h2 className="mb-4 text-xl font-extrabold text-white">{t('connectWallet')}</h2>
-        {isNonInjectedWalletContext() && (
-          <p className="mb-3 rounded-lg border border-[rgba(99,102,241,0.25)] bg-[rgba(99,102,241,0.08)] px-3 py-2 text-xs leading-snug text-[#c7d2fe]">
-            {t('walletConnect.metamaskDeepLinkHint')}
-          </p>
-        )}
         {isPending && (
           <p className="mb-3 text-sm text-[#94a3b8]">{t('walletConnect.waitingWallet')}</p>
         )}

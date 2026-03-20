@@ -12,8 +12,6 @@
   "connectWalletPlease": "Connect your wallet.",
   "walletConnect.waitingWallet": "Approve the request in your wallet…",
   "walletConnect.cancelAttempt": "Cancel and close",
-  "walletConnect.nativeWebViewHint": "In the app WebView, use MetaMask: the SDK opens the MetaMask app for approval.",
-  "walletConnect.metamaskDeepLinkHint": "When MetaMask opens, approve the connection (or enter the pairing code). If nothing appears, update MetaMask and ensure NEXT_PUBLIC_APP_URL matches your live site URL. You can also try NEXT_PUBLIC_METAMASK_USE_DEEPLINK=false for universal-link mode.",
   "walletConnect.noConnectors": "No compatible wallet option is available. Check your configuration.",
   "addressCopied": "Address copied",
   "sharedPool": "Shared pool",
