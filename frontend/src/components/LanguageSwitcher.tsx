@@ -14,7 +14,8 @@ export function LanguageSwitcher({ variant = 'default' }: LanguageSwitcherProps)
   const compact = variant === 'compact';
 
   return (
-    <div className="flex shrink-0 flex-nowrap items-center gap-0.5 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] p-0.5">
+    <div
+      className="flex shrink-0 flex-nowrap items-center gap-0.5 rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] p-0.5"
       role="group"
       aria-label="Language"
     >
