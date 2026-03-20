@@ -39,8 +39,9 @@ import { MobileNetworkSection } from './mobile/MobileNetworkSection';
 import { MobileGasSavings } from './mobile/MobileGasSavings';
 import { MobileTransferForm } from './mobile/MobileTransferForm';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useGoogleRewardedAd } from '@/hooks/useGoogleRewardedAd';
 
-const DAILY_LIMIT = 5;
+const DAILY_LIMIT = 10;
 
 function detectMobileLayout(): boolean {
   if (typeof navigator !== 'undefined') {
@@ -90,6 +91,7 @@ function getFreeTransactionsUsed(): number {
 
 export function GaslessApp() {
   const { t } = useLocale();
+  const rewardedAd = useGoogleRewardedAd();
   const { address, status: accountStatus } = useAccount();
   // 재연결(reconnecting) 중에는 캐시된 주소가 보이지 않도록, 실제 연결됐을 때만 연결 상태 표시
   const isConnected = accountStatus === 'connected' && !!address;
@@ -151,13 +153,18 @@ export function GaslessApp() {
     return () => {};
   }, []);
 
-  // 앱(Capacitor WebView)에서 열렸을 때만 AdMob 초기화
+  // 앱(Capacitor WebView)에서 열렸을 때만 AdMob 초기화 (리워드 영상용)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const cap = (window as unknown as { Capacitor?: unknown }).Capacitor;
-    if (!cap) return;
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (!cap?.isNativePlatform?.()) return;
+    const testing = process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
     import('@capacitor-community/admob')
-      .then((m) => m.AdMob.initialize())
+      .then((m) =>
+        m.AdMob.initialize({
+          initializeForTesting: testing,
+        })
+      )
       .catch(() => {});
   }, []);
 
@@ -387,10 +394,38 @@ export function GaslessApp() {
             functionName: 'nonces',
             args: [address],
           });
+          // EIP-712 도메인: 토큰의 name()/version()을 온체인에서 읽어 사용 (Base Sepolia USDC는 name="USDC", version="2")
+          const permitVersionAbi = [
+            { inputs: [], name: 'version', outputs: [{ type: 'string' }], stateMutability: 'view', type: 'function' },
+          ] as const;
+          let permitDomainName = permitConfig!.name;
+          let permitDomainVersion = permitConfig!.version;
+          try {
+            const tokenName = await publicClient.readContract({
+              address: tokenAddress,
+              abi: erc20Abi,
+              functionName: 'name',
+              args: [],
+            });
+            if (typeof tokenName === 'string' && tokenName) permitDomainName = tokenName;
+          } catch {
+            /* 설정값 유지 */
+          }
+          try {
+            const tokenVersion = await publicClient.readContract({
+              address: tokenAddress,
+              abi: permitVersionAbi,
+              functionName: 'version',
+              args: [],
+            });
+            if (typeof tokenVersion === 'string' && tokenVersion) permitDomainVersion = tokenVersion;
+          } catch {
+            /* 설정값 유지 (일부 토큰은 version() 없음) */
+          }
           permitSignature = await walletClient.signTypedData({
             domain: {
-              name: permitConfig!.name,
-              version: permitConfig!.version,
+              name: permitDomainName,
+              version: permitDomainVersion,
               chainId,
               verifyingContract: tokenAddress,
             },
@@ -702,6 +737,8 @@ className="mt-4 w-full py-2 text-[#94a3b8] text-sm hover:text-white"
           onComplete={handleAdComplete}
           onSkip={handleAdSkip}
           transaction={pendingTransaction}
+          showRealRewardedAd={rewardedAd.showRewardedAd}
+          isRewardedAdConfigured={rewardedAd.isConfigured}
         />
         <TransactionModal isOpen={showTransactionModal} transaction={pendingTransaction} />
         <TransactionCompleteModal
@@ -901,6 +938,8 @@ onClick={() => setShowConnectModal(false)}
         onComplete={handleAdComplete}
         onSkip={handleAdSkip}
         transaction={pendingTransaction}
+        showRealRewardedAd={rewardedAd.showRewardedAd}
+        isRewardedAdConfigured={rewardedAd.isConfigured}
       />
       <TransactionModal isOpen={showTransactionModal} transaction={pendingTransaction} />
       <TransactionCompleteModal

@@ -1,9 +1,11 @@
 /**
- * Google 광고 연동 (웹)
- * - 리워드 광고: Google Publisher Tag (GPT) 사용.
- *   (AdMob은 모바일 앱용이므로, 웹에서는 GPT 리워드 광고 사용)
+ * Google 광고 연동 (웹 브라우저 전용)
+ * - 리워드 광고: Google Publisher Tag (GPT) / Ad Manager.
+ * - Capacitor 네이티브 앱에서는 사용하지 않음 → AdMob (`admobRewarded.ts`).
  * - 참고: https://developers.google.com/publisher-tag/samples/display-rewarded-ad
  */
+
+import { isCapacitorNativeApp } from './capacitorNative';
 
 const GPT_SCRIPT_URL = 'https://securepubads.g.doubleclick.net/tag/js/gpt.js';
 
@@ -52,9 +54,25 @@ function loadGptScript(): Promise<void> {
  * - adUnitPath: 예) '/12345678/rewarded' (Google Ad Manager에서 발급한 리워드 광고 단위 경로)
  * - 리워드 수령 시 resolve, 닫기만 하거나 실패 시 reject
  */
-export function showGoogleRewardedAd(adUnitPath: string): Promise<void> {
+export type ShowGoogleRewardedAdOptions = {
+  /** display 직전 호출 — 모달을 숨겨 전체화면 광고가 가려지지 않게 할 때 사용 */
+  onBeforeDisplay?: () => void;
+};
+
+export function showGoogleRewardedAd(
+  adUnitPath: string,
+  options?: ShowGoogleRewardedAdOptions
+): Promise<void> {
   return new Promise(async (resolve, reject) => {
     try {
+      if (isCapacitorNativeApp()) {
+        reject(
+          new Error(
+            'Web GPT rewarded ads are not used in the native app. Use AdMob rewarded instead.'
+          )
+        );
+        return;
+      }
       await loadGptScript();
       const googletag = window.googletag;
       if (!googletag?.cmd) {
@@ -107,6 +125,7 @@ export function showGoogleRewardedAd(adUnitPath: string): Promise<void> {
         pubads.addEventListener?.('rewardedSlotClosed', onClosed);
 
         googletag!.enableServices?.();
+        options?.onBeforeDisplay?.();
         googletag!.display?.(slot);
       });
     } catch (err) {
@@ -117,6 +136,7 @@ export function showGoogleRewardedAd(adUnitPath: string): Promise<void> {
 
 export function isGoogleRewardedAdConfigured(): boolean {
   if (typeof window === 'undefined') return false;
+  if (isCapacitorNativeApp()) return false;
   const slot = process.env.NEXT_PUBLIC_GOOGLE_REWARDED_AD_SLOT;
   return !!slot && slot.length > 2;
 }

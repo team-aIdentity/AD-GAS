@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Play, Volume2 } from 'lucide-react';
+import { X, Play, Volume2, Loader2, Maximize2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
+import type { RewardedAdShowOptions } from '@/hooks/useGoogleRewardedAd';
 
 interface PendingTransaction {
   to: string;
@@ -16,38 +18,78 @@ interface AdModalProps {
   onComplete: () => void;
   onSkip: () => void;
   transaction: PendingTransaction | null;
+  /** 설정 시: 재생 클릭 후 GPT(웹) 또는 AdMob(앱) 리워드 영상 */
+  showRealRewardedAd?: (opts?: RewardedAdShowOptions) => Promise<void>;
+  isRewardedAdConfigured?: boolean;
 }
 
-export function AdModal({ isOpen, onComplete, onSkip, transaction }: AdModalProps) {
+export function AdModal({
+  isOpen,
+  onComplete,
+  onSkip,
+  transaction,
+  showRealRewardedAd,
+  isRewardedAdConfigured,
+}: AdModalProps) {
   const { t } = useLocale();
   const [timeRemaining, setTimeRemaining] = useState(15);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingRealAd, setIsLoadingRealAd] = useState(false);
+  /** true면 모달이 전체화면 광고를 가리지 않음(GPT/AdMob 전면) */
+  const [adSurfaceActive, setAdSurfaceActive] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setTimeRemaining(15);
       setIsPlaying(false);
+      setIsLoadingRealAd(false);
+      setAdSurfaceActive(false);
     }
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !isPlaying) return;
+    if (!isOpen || !isPlaying || isRewardedAdConfigured) return;
 
     if (timeRemaining > 0) {
       const timer = setTimeout(() => setTimeRemaining(timeRemaining - 1), 1000);
       return () => clearTimeout(timer);
     }
     onComplete();
-  }, [timeRemaining, isOpen, isPlaying, onComplete]);
+  }, [timeRemaining, isOpen, isPlaying, isRewardedAdConfigured, onComplete]);
 
-  const handlePlayAd = () => {
+  const handlePlayAd = async () => {
+    if (isRewardedAdConfigured && showRealRewardedAd) {
+      setIsLoadingRealAd(true);
+      setAdSurfaceActive(false);
+      try {
+        await showRealRewardedAd({
+          onAdSurfaceReady: () => {
+            setAdSurfaceActive(true);
+            setIsLoadingRealAd(false);
+          },
+        });
+        onComplete();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error(msg);
+      } finally {
+        setAdSurfaceActive(false);
+        setIsLoadingRealAd(false);
+      }
+      return;
+    }
     setIsPlaying(true);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div
+      className={`fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity duration-150 ${
+        adSurfaceActive ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      }`}
+      aria-hidden={adSurfaceActive}
+    >
       <div className="bg-[#1e293b] rounded-3xl max-w-3xl w-full overflow-hidden border border-[rgba(99,102,241,0.3)] shadow-[0px_0px_40px_0px_rgba(99,102,241,0.4)]">
         <div className="flex items-center justify-between p-6 border-b border-[rgba(255,255,255,0.08)]">
           <div className="flex items-center gap-3">
@@ -68,12 +110,31 @@ export function AdModal({ isOpen, onComplete, onSkip, transaction }: AdModalProp
           </button>
         </div>
 
-        <div className="relative aspect-video bg-gradient-to-br from-[#4c1d95] via-[#5b21b6] to-[#6d28d9] flex items-center justify-center">
-          {!isPlaying ? (
+        <div className="relative aspect-video bg-gradient-to-br from-[#4c1d95] via-[#5b21b6] to-[#6d28d9] flex flex-col items-center justify-center gap-3 px-4">
+          {!isRewardedAdConfigured && (
+            <span className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider text-white/70 bg-black/30 px-2 py-1 rounded-md border border-white/10">
+              {t('adModal.demoBadge')}
+            </span>
+          )}
+
+          {isRewardedAdConfigured && !isLoadingRealAd && !isPlaying && (
+            <div className="flex flex-col items-center gap-2 text-center text-white/90 max-w-md mb-2">
+              <Maximize2 className="size-8 opacity-80" />
+              <p className="text-sm font-medium leading-snug">{t('adModal.fullscreenHint')}</p>
+            </div>
+          )}
+
+          {isLoadingRealAd ? (
+            <div className="flex flex-col items-center gap-4 text-white">
+              <Loader2 className="size-14 animate-spin" />
+              <p className="text-sm font-medium text-white/90">{t('adModal.loadingAd')}</p>
+            </div>
+          ) : !isPlaying ? (
             <button
               type="button"
-              onClick={handlePlayAd}
-              className="bg-white/10 backdrop-blur-sm p-8 rounded-full hover:bg-white/20 transition-all border border-white/20"
+              onClick={() => void handlePlayAd()}
+              disabled={isLoadingRealAd}
+              className="bg-white/10 backdrop-blur-sm p-8 rounded-full hover:bg-white/20 transition-all border border-white/20 disabled:opacity-50"
             >
               <Play className="size-16 text-white fill-white" />
             </button>

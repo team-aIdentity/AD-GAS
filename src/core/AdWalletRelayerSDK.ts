@@ -29,7 +29,7 @@ interface RelayerSdkConfig {
 /**
  * AD Wallet 전용 대납(스폰서) Relayer SDK.
  * - Biconomy 없이, 우리 쪽 Relayer API(/api/relay/transfer)를 호출해 가스 대납 전송을 수행한다.
- * - 체인/토큰/1일 5회 제한 로직은 서버에서 검증한다.
+ * - 체인/토큰/1일 10회 제한 로직은 서버에서 검증한다.
  */
 export class AdWalletRelayerSDK {
   private readonly baseUrl: string;

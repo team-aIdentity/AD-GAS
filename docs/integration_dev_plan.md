@@ -38,7 +38,7 @@
 |------|------|
 | Smart contracts | Solidity ^0.8.20, OpenZeppelin, Hardhat (existing) + AdWalletPoints, AdWalletSwapPool |
 | Type 1 | EIP-4337 Paymaster (`AdSponsorPaymaster`), meta-tx (`AdWalletSponsoredTransfer`) |
-| SDK | TypeScript, Viem, Biconomy AbstractJS (existing `GaslessSDK`) |
+| SDK | TypeScript, Viem, self-hosted Relayer-based AdWallet SDK |
 | Frontend | Next.js, wagmi, extend `Form1TransferUI` · `AdminDepositPage` |
 | Infrastructure | RPC, Bundler (or MEE), ad verification server, points backend (optional) |
 
@@ -208,7 +208,7 @@ interface IAdWalletPoints {
 ### 3.1 Existing GaslessSDK (`src/core/GaslessSDK.ts`)
 
 - **Implemented**: `setAdTrigger`, `getAdTrigger`, `sendGaslessTransaction` (beforeTransaction → ad view → tx)
-- **Config**: `SdkConfig` — `publicClient`, `walletClient`, `apiKey` (Biconomy)
+- **Config**: `SdkConfig` — `publicClient`, `walletClient` (Biconomy removed)
 - **Integration**: Keep Type 1 as-is; add Type 2 methods e.g. `getPointsBalance(address?)`, `sendTransactionWithPoints(tx)` as new methods
 
 ### 3.2 Target APIs for Integration

@@ -22,7 +22,7 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <LocaleProvider>
-      <WagmiProvider config={config}>
+      <WagmiProvider config={config} reconnectOnMount={false}>
         <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       </WagmiProvider>
     </LocaleProvider>

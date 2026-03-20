@@ -1,6 +1,7 @@
 'use client';
 
 import { svgPaths } from '@/lib/svgPaths';
+import { SUPPORTED_NETWORKS } from '@/lib/networks';
 import { useLocale } from '@/contexts/LocaleContext';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
@@ -17,11 +18,11 @@ function Logo() {
 function TitleGroup() {
   const { t } = useLocale();
   return (
-    <div className="content-stretch flex flex-col gap-px items-start not-italic relative shrink-0">
-      <p className="font-extrabold leading-[21.6px] relative shrink-0 text-[18px] text-shadow-[0px_0px_16px_rgba(99,102,241,0.5)] text-white">
-        Gasless SDK
+    <div className="flex min-w-0 flex-1 flex-col items-start gap-px not-italic">
+      <p className="max-w-full truncate font-extrabold leading-tight text-[17px] text-white text-shadow-[0px_0px_16px_rgba(99,102,241,0.5)] sm:text-[18px]">
+        AD GAS
       </p>
-      <p className="font-semibold leading-[13.2px] relative shrink-0 text-[#a5b4fc] text-[11px]">
+      <p className="line-clamp-2 max-w-full text-[10px] font-semibold leading-snug text-[#a5b4fc] sm:text-[11px]">
         {t('header.tagline')}
       </p>
     </div>
@@ -66,23 +67,27 @@ export function MobileHeader({
 }: MobileHeaderProps) {
   const { t } = useLocale();
   return (
-    <header className="relative shrink-0 w-full">
-      <div className="content-stretch flex flex-col gap-4 items-start pb-4 pt-5 px-5 relative w-full">
-        <div className="content-stretch flex items-center justify-between relative shrink-0 w-full">
-          <div className="content-stretch flex gap-2.5 items-center relative shrink-0">
-            <Logo />
+    <header className="relative w-full min-w-0 max-w-full shrink-0 overflow-x-hidden">
+      <div className="relative flex w-full min-w-0 max-w-full flex-col items-stretch gap-3 px-4 pb-4 pt-5 sm:px-5">
+        {/* 1행: 로고+제목(가변) | 지갑(고정 44px) — 언어는 아래로 분리해 가로 오버플로 방지 */}
+        <div className="flex w-full min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <div className="shrink-0">
+              <Logo />
+            </div>
             <TitleGroup />
           </div>
-          <div className="flex items-center gap-2">
-            <LanguageSwitcher />
           <button
             type="button"
             onClick={isConnected ? onDisconnect : onConnect}
-            className="bg-[rgba(99,102,241,0.19)] h-[44px] flex items-center justify-center relative rounded-[22px] shrink-0 w-[120px] border border-[rgba(99,102,241,0.38)] shadow-[0px_0px_16px_0px_rgba(99,102,241,0.25)] hover:bg-[rgba(99,102,241,0.25)] transition-colors"
+            aria-label={isConnected ? t('header.disconnectWallet') : t('header.connectWallet')}
+            className="flex size-11 shrink-0 items-center justify-center rounded-full border border-[rgba(99,102,241,0.38)] bg-[rgba(99,102,241,0.19)] shadow-[0px_0px_16px_0px_rgba(99,102,241,0.25)] transition-colors hover:bg-[rgba(99,102,241,0.25)]"
           >
             <WalletIcon />
           </button>
-          </div>
+        </div>
+        <div className="flex w-full min-w-0 justify-end">
+          <LanguageSwitcher variant="compact" />
         </div>
 
         <div className="bg-[rgba(255,255,255,0.06)] relative rounded-2xl shrink-0 w-full border border-[rgba(255,255,255,0.13)] shadow-[0px_6px_24px_0px_rgba(0,0,0,0.25)]">
@@ -113,7 +118,7 @@ export function MobileHeader({
               <p className="font-normal leading-6 relative shrink-0 text-[20px] text-white">🌐</p>
               <div className="content-stretch flex flex-col gap-px items-center relative shrink-0">
                 <p className="font-extrabold leading-[21.6px] relative shrink-0 text-[18px] text-shadow-[0px_0px_12px_rgba(59,130,246,0.38)] text-white">
-                  5
+                  {SUPPORTED_NETWORKS.length}
                 </p>
                 <p className="font-semibold leading-[13.2px] relative shrink-0 text-[#94a3b8] text-[11px]">
                   {t('mobile.supportedChains')}

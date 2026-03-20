@@ -48,8 +48,10 @@ export const PERMIT_TOKEN_CONFIG: Record<
   43114: {
     USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Avalanche C-Chain
   },
+  // Base Sepolia (테스트넷) — 온체인: name() = "USDC", version() = "2" (Circle 스타일)
+  // name/version은 GaslessApp에서 name()/version() 읽기 실패 시에만 폴백으로 사용
   84532: {
-    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Base Sepolia
+    USDC: { name: 'USDC', version: '2' },
   },
 };
 

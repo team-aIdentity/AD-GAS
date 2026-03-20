@@ -71,9 +71,9 @@ interface RelayBody {
   deadline?: number; // Permit 만료 시간 (unix timestamp)
 }
 
-// 메모리 기반 1일 5회 제한 (from 주소 기준)
+// 메모리 기반 1일 10회 제한 (from 주소 기준)
 const dailyUsage = new Map<string, { date: string; count: number }>();
-const DAILY_LIMIT = 5;
+const DAILY_LIMIT = 10;
 
 function getTodayKey(address: string) {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
@@ -84,7 +84,7 @@ function checkAndIncreaseDailyLimit(from: string) {
   const key = getTodayKey(from);
   const current = dailyUsage.get(key) || { date: new Date().toDateString(), count: 0 };
   if (current.count >= DAILY_LIMIT) {
-    throw new Error('오늘 무료 전송 한도(5회)를 모두 사용했습니다.');
+    throw new Error(`오늘 무료 전송 한도(${DAILY_LIMIT}회)를 모두 사용했습니다.`);
   }
   dailyUsage.set(key, { ...current, count: current.count + 1 });
 }

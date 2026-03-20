@@ -1,6 +1,7 @@
 {
   "header.tagline": "광고 보고 가스비 무료",
   "header.connectWallet": "지갑 연결",
+  "header.disconnectWallet": "연결 해제",
   "connectWallet": "지갑 연결",
   "close": "닫기",
   "walletConnectPrompt": "지갑을 연결해주세요",
@@ -36,6 +37,9 @@
   "footer.secure": "Secure Connection",
   "adModal.title": "광고 시청",
   "adModal.desc": "광고를 끝까지 시청하면 가스비가 무료입니다",
+  "adModal.loadingAd": "광고 불러오는 중…",
+  "adModal.demoBadge": "데모",
+  "adModal.fullscreenHint": "재생 시 Google 리워드 영상이 전체 화면으로 표시됩니다. 끝까지 시청하면 무료 전송이 진행됩니다. (앱에서는 AdMob 영상)",
   "adModal.watching": "광고 시청 중...",
   "adModal.secondsLeft": "{{count}}초 후 트랜잭션이 실행됩니다",
   "adModal.promoTitle": "Web3 게임 출시!",

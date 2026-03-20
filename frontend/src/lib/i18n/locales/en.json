@@ -1,6 +1,7 @@
 {
   "header.tagline": "Watch ad, gas-free",
   "header.connectWallet": "Connect wallet",
+  "header.disconnectWallet": "Disconnect wallet",
   "connectWallet": "Connect wallet",
   "close": "Close",
   "walletConnectPrompt": "Connect your wallet",
@@ -36,6 +37,9 @@
   "footer.secure": "Secure Connection",
   "adModal.title": "Watch ad",
   "adModal.desc": "Watch the ad to the end for free gas",
+  "adModal.loadingAd": "Loading ad…",
+  "adModal.demoBadge": "Demo",
+  "adModal.fullscreenHint": "The rewarded video plays full screen. Watch to the end to continue your free send. (In the app, AdMob video is used.)",
   "adModal.watching": "Watching ad...",
   "adModal.secondsLeft": "Transaction will execute in {{count}} seconds",
   "adModal.promoTitle": "Web3 game launch!",
