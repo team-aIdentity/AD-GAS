@@ -1,16 +1,17 @@
 import { http, createConfig } from 'wagmi'
 import { mainnet, base, baseSepolia, avalanche, bsc } from 'wagmi/chains'
-import { injected, metaMask } from 'wagmi/connectors'
+import { injected, metaMask, walletConnect } from 'wagmi/connectors'
 import { openMetaMaskDeeplink } from '@/lib/metamaskOpenDeeplink'
 
 // 지원 체인: 이더리움 메인넷 / Base 메인넷 / Base Sepolia / Avalanche / BNB (5개)
-// MetaMask SDK + 브라우저 주입 (WalletConnect 미사용)
+// Capacitor WebView: WalletConnect → MetaMask. 데스크톱: MetaMask SDK + Injected (UI에서 WC 숨김)
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
+
 const dappMetadataUrl =
   (process.env.NEXT_PUBLIC_APP_URL?.trim() && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
   (process.env.VERCEL_URL?.trim() && `https://${process.env.VERCEL_URL.trim()}`) ||
   'https://ad-gas.vercel.app'
 
-/** false면 유니버설 링크(https://metamask.app/...) 위주 */
 const metamaskUseDeeplink = process.env.NEXT_PUBLIC_METAMASK_USE_DEEPLINK !== 'false'
 
 const RPC_URLS: Record<number, string> = {
@@ -24,6 +25,7 @@ const RPC_URLS: Record<number, string> = {
 export const config = createConfig({
   chains: [mainnet, base, baseSepolia, avalanche, bsc],
   connectors: [
+    walletConnect({ projectId }),
     metaMask({
       dappMetadata: {
         name: 'AD GAS',

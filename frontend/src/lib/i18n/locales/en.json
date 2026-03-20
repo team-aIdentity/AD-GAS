@@ -13,6 +13,8 @@
   "walletConnect.waitingWallet": "Approve the request in your wallet…",
   "walletConnect.cancelAttempt": "Cancel and close",
   "walletConnect.noConnectors": "No compatible wallet option is available. Check your configuration.",
+  "walletConnect.metamaskViaWc": "Connect with MetaMask",
+  "walletConnect.capacitorRequiresWcProjectId": "Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID (WalletConnect Cloud) on your deployment for in-app wallet connection.",
   "addressCopied": "Address copied",
   "sharedPool": "Shared pool",
   "sendFree": "Send for free",

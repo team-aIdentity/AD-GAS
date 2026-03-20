@@ -13,6 +13,8 @@
   "walletConnect.waitingWallet": "지갑 앱에서 연결을 승인해 주세요…",
   "walletConnect.cancelAttempt": "취소하고 닫기",
   "walletConnect.noConnectors": "사용 가능한 지갑 옵션이 없습니다. 설정을 확인해 주세요.",
+  "walletConnect.metamaskViaWc": "MetaMask 연결",
+  "walletConnect.capacitorRequiresWcProjectId": "앱에서 연결하려면 배포 환경에 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID(WalletConnect Cloud)를 설정해 주세요.",
   "addressCopied": "주소가 복사되었습니다",
   "sharedPool": "공유 풀",
   "sendFree": "무료 전송하기",
