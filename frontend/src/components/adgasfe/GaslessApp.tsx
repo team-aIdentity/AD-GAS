@@ -11,14 +11,7 @@ import {
   usePublicClient,
   useWriteContract,
 } from 'wagmi';
-import {
-  formatUnits,
-  parseUnits,
-  encodePacked,
-  keccak256,
-  getAddress,
-  maxUint256,
-} from 'viem';
+import { formatUnits, parseUnits, encodePacked, keccak256, getAddress, maxUint256 } from 'viem';
 import { Toaster } from 'sonner';
 import { toast } from 'sonner';
 import { AdWalletRelayerSDK } from '../../../../src';
@@ -35,6 +28,7 @@ import { AdModal } from './AdModal';
 import { TransactionModal } from './TransactionModal';
 import { TransactionCompleteModal } from './TransactionCompleteModal';
 import { MobileHeader } from './mobile/MobileHeader';
+import { WalletConnectModal } from './WalletConnectModal';
 import { MobileNetworkSection } from './mobile/MobileNetworkSection';
 import { MobileGasSavings } from './mobile/MobileGasSavings';
 import { MobileTransferForm } from './mobile/MobileTransferForm';
@@ -66,7 +60,8 @@ function getErrorKey(error: Error): string {
     msg.includes('광고')
   )
     return 'errors.adIncomplete';
-  if (msg.includes('limit') || msg.includes('quota') || msg.includes('한도')) return 'errors.gasLimit';
+  if (msg.includes('limit') || msg.includes('quota') || msg.includes('한도'))
+    return 'errors.gasLimit';
   if (msg.includes('insufficient') || msg.includes('balance') || msg.includes('fund'))
     return 'errors.paymasterFunds';
   if (msg.includes('timeout') || msg.includes('network') || msg.includes('econnrefused'))
@@ -95,12 +90,12 @@ export function GaslessApp() {
   const { address, status: accountStatus } = useAccount();
   // 재연결(reconnecting) 중에는 캐시된 주소가 보이지 않도록, 실제 연결됐을 때만 연결 상태 표시
   const isConnected = accountStatus === 'connected' && !!address;
-  const { connectors, connect, status: connectStatus } = useConnect();
+  const { connectors, connect, reset: resetConnect, isPending: isConnectPending } = useConnect();
   const { disconnect } = useDisconnect();
 
   const mapErrorToMessage = (error: Error) => {
     const key = getErrorKey(error);
-    return key ? t(key) : (error.message || t('errors.generic'));
+    return key ? t(key) : error.message || t('errors.generic');
   };
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
@@ -156,11 +151,12 @@ export function GaslessApp() {
   // 앱(Capacitor WebView)에서 열렸을 때만 AdMob 초기화 (리워드 영상용)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
+      .Capacitor;
     if (!cap?.isNativePlatform?.()) return;
     const testing = process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
     import('@capacitor-community/admob')
-      .then((m) =>
+      .then(m =>
         m.AdMob.initialize({
           initializeForTesting: testing,
         })
@@ -195,7 +191,9 @@ export function GaslessApp() {
     availableTokens.push({
       symbol: 'USDC',
       name: TOKEN_INFO.USDC.name,
-      balance: usdcBalanceData ? Number(formatUnits(usdcBalanceData.value, TOKEN_INFO.USDC.decimals)) : 0,
+      balance: usdcBalanceData
+        ? Number(formatUnits(usdcBalanceData.value, TOKEN_INFO.USDC.decimals))
+        : 0,
       decimals: TOKEN_INFO.USDC.decimals,
       usdPrice: TOKEN_INFO.USDC.usdPrice,
     });
@@ -204,7 +202,9 @@ export function GaslessApp() {
     availableTokens.push({
       symbol: 'USDT',
       name: TOKEN_INFO.USDT.name,
-      balance: usdtBalanceData ? Number(formatUnits(usdtBalanceData.value, TOKEN_INFO.USDT.decimals)) : 0,
+      balance: usdtBalanceData
+        ? Number(formatUnits(usdtBalanceData.value, TOKEN_INFO.USDT.decimals))
+        : 0,
       decimals: TOKEN_INFO.USDT.decimals,
       usdPrice: TOKEN_INFO.USDT.usdPrice,
     });
@@ -246,8 +246,9 @@ export function GaslessApp() {
   const contractAddress = getContractAddress();
 
   const handleConnect = useCallback(() => {
+    resetConnect();
     setShowConnectModal(true);
-  }, []);
+  }, [resetConnect]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
@@ -362,7 +363,8 @@ export function GaslessApp() {
       if (!tokenAddresses || (selectedToken.symbol !== 'USDC' && selectedToken.symbol !== 'USDT')) {
         throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
       }
-      const tokenAddress = selectedToken.symbol === 'USDC' ? tokenAddresses.USDC : tokenAddresses.USDT;
+      const tokenAddress =
+        selectedToken.symbol === 'USDC' ? tokenAddresses.USDC : tokenAddresses.USDT;
       if (!tokenAddress) {
         throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
       }
@@ -389,14 +391,26 @@ export function GaslessApp() {
           const tokenNonce = await publicClient.readContract({
             address: tokenAddress,
             abi: [
-              { inputs: [{ name: 'owner', type: 'address' }], name: 'nonces', outputs: [{ type: 'uint256' }], stateMutability: 'view', type: 'function' },
+              {
+                inputs: [{ name: 'owner', type: 'address' }],
+                name: 'nonces',
+                outputs: [{ type: 'uint256' }],
+                stateMutability: 'view',
+                type: 'function',
+              },
             ],
             functionName: 'nonces',
             args: [address],
           });
           // EIP-712 도메인: 토큰의 name()/version()을 온체인에서 읽어 사용 (Base Sepolia USDC는 name="USDC", version="2")
           const permitVersionAbi = [
-            { inputs: [], name: 'version', outputs: [{ type: 'string' }], stateMutability: 'view', type: 'function' },
+            {
+              inputs: [],
+              name: 'version',
+              outputs: [{ type: 'string' }],
+              stateMutability: 'view',
+              type: 'function',
+            },
           ] as const;
           let permitDomainName = permitConfig!.name;
           let permitDomainVersion = permitConfig!.version;
@@ -418,7 +432,8 @@ export function GaslessApp() {
               functionName: 'version',
               args: [],
             });
-            if (typeof tokenVersion === 'string' && tokenVersion) permitDomainVersion = tokenVersion;
+            if (typeof tokenVersion === 'string' && tokenVersion)
+              permitDomainVersion = tokenVersion;
           } catch {
             /* 설정값 유지 (일부 토큰은 version() 없음) */
           }
@@ -613,7 +628,7 @@ export function GaslessApp() {
       return;
     }
 
-// ERC20 잔액 확인
+    // ERC20 잔액 확인
     const tokenAmount = parseFloat(amount);
     if (selectedToken.balance < tokenAmount) {
       toast.error(t('toast.insufficientBalance'));
@@ -633,71 +648,62 @@ export function GaslessApp() {
       network: { name: currentNetwork.name },
     });
     setShowAdModal(true);
-  }, [
-    isConnected,
-    recipientAddress,
-    amount,
-    selectedToken,
-    currentNetwork.name,
-    t,
-  ]);
+  }, [isConnected, recipientAddress, amount, selectedToken, currentNetwork.name, t]);
 
   const onTokenChange = useCallback((token: Token) => {
     setSelectedToken(token);
   }, []);
 
   if (!isConnected) {
+    const promptCard = (
+      <div className="w-full max-w-md space-y-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-6 text-center sm:p-8">
+        <p className="text-[18px] font-extrabold sm:text-[20px]">{t('walletConnectPrompt')}</p>
+        <p className="text-sm text-[#94a3b8]">{t('walletConnectDesc')}</p>
+        <button
+          type="button"
+          onClick={handleConnect}
+          className="w-full rounded-2xl border border-[rgba(99,102,241,0.38)] bg-[rgba(99,102,241,0.19)] py-3 text-[14px] font-bold transition-colors hover:bg-[rgba(99,102,241,0.25)] sm:text-[15px]"
+        >
+          {t('connectWallet')}
+        </button>
+      </div>
+    );
+
     return (
       <div className="min-h-screen bg-[#0f172a] text-white">
-        <Header
-          isConnected={false}
-          walletAddress=""
-          onConnect={handleConnect}
-          onDisconnect={() => {}}
-        />
-        <main className="px-12 py-8 flex items-center justify-center min-h-[60vh]">
-          <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-[24px] p-8 max-w-md w-full text-center space-y-6">
-            <p className="font-extrabold text-[20px]">{t('walletConnectPrompt')}</p>
-            <p className="text-[#94a3b8] text-sm">{t('walletConnectDesc')}</p>
-            <button
-              type="button"
-              onClick={handleConnect}
-              className="w-full py-3 rounded-2xl bg-[rgba(99,102,241,0.19)] border border-[rgba(99,102,241,0.38)] hover:bg-[rgba(99,102,241,0.25)] transition-colors font-bold text-[15px]"
-            >
-              {t('connectWallet')}
-            </button>
-          </div>
-        </main>
-        {showConnectModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-[#1e293b] rounded-3xl max-w-md w-full p-6 border border-[rgba(255,255,255,0.08)]">
-              <h2 className="font-extrabold text-xl text-white mb-4">{t('connectWallet')}</h2>
-              <div className="space-y-2">
-                {connectors.map(connector => (
-                  <button
-                    key={connector.uid}
-                    type="button"
-                    disabled={connectStatus === 'pending'}
-                    onClick={() => {
-                      connect({ connector });
-                      setShowConnectModal(false);
-                    }}
-                    className="w-full py-3 px-4 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(99,102,241,0.13)] text-left font-medium text-white transition-colors disabled:opacity-50"
-                  >
-                    {connector.name}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConnectModal(false)}
-className="mt-4 w-full py-2 text-[#94a3b8] text-sm hover:text-white"
-                >
-                {t('close')}
-              </button>
-            </div>
-          </div>
+        {isMobile ? (
+          <>
+            <MobileHeader
+              isConnected={false}
+              onConnect={handleConnect}
+              onDisconnect={() => {}}
+              freeTransactionsUsed={getFreeTransactionsUsed()}
+            />
+            <main className="flex min-h-[50vh] items-center justify-center px-[calc(1.25rem+10px)] pb-8 pt-2">
+              {promptCard}
+            </main>
+          </>
+        ) : (
+          <>
+            <Header
+              isConnected={false}
+              walletAddress=""
+              onConnect={handleConnect}
+              onDisconnect={() => {}}
+            />
+            <main className="flex min-h-[60vh] items-center justify-center px-12 py-8">
+              {promptCard}
+            </main>
+          </>
         )}
+        <WalletConnectModal
+          open={showConnectModal}
+          onClose={() => setShowConnectModal(false)}
+          connectors={connectors}
+          connect={connect}
+          reset={resetConnect}
+          isPending={isConnectPending}
+        />
         <Toaster />
       </div>
     );
@@ -796,7 +802,8 @@ className="mt-4 w-full py-2 text-[#94a3b8] text-sm hover:text-white"
                           {t('freeTx')}
                         </p>
                         <p className="font-extrabold text-[32px] leading-[21.6px] text-white text-center mt-4">
-                          {freeTransactionsUsed}{t('times')}
+                          {freeTransactionsUsed}
+                          {t('times')}
                         </p>
                       </div>
                       <div className="flex flex-col gap-1 items-center">
@@ -804,7 +811,8 @@ className="mt-4 w-full py-2 text-[#94a3b8] text-sm hover:text-white"
                           {t('remainingLimit')}
                         </p>
                         <p className="font-extrabold text-[32px] leading-[21.6px] text-white text-center mt-4">
-                          {DAILY_LIMIT - freeTransactionsUsed}{t('perDay')}
+                          {DAILY_LIMIT - freeTransactionsUsed}
+                          {t('perDay')}
                         </p>
                       </div>
                     </div>
@@ -838,15 +846,15 @@ className="mt-4 w-full py-2 text-[#94a3b8] text-sm hover:text-white"
             <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-[24px] p-7">
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-1.5">
-                  <p className="font-extrabold text-[20px] leading-6 text-white">{t('transactionHistory')}</p>
+                  <p className="font-extrabold text-[20px] leading-6 text-white">
+                    {t('transactionHistory')}
+                  </p>
                   <p className="font-medium text-[14px] leading-[16.8px] text-[#94a3b8]">
                     {t('transactionHistoryDesc')}
                   </p>
                 </div>
                 {transactions.length === 0 ? (
-                  <div className="text-center py-12 text-[#94a3b8]">
-                    {t('noTransactionsYet')}
-                  </div>
+                  <div className="text-center py-12 text-[#94a3b8]">{t('noTransactionsYet')}</div>
                 ) : (
                   <div className="space-y-3">
                     {transactions.map(tx => {
@@ -903,36 +911,14 @@ className="mt-4 w-full py-2 text-[#94a3b8] text-sm hover:text-white"
           <span>{t('footer.secure')}</span>
         </div>
       </footer>
-      {showConnectModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#1e293b] rounded-3xl max-w-md w-full p-6 border border-[rgba(255,255,255,0.08)]">
-            <h2 className="font-extrabold text-xl text-white mb-4">{t('connectWallet')}</h2>
-            <div className="space-y-2">
-              {connectors.map(connector => (
-                <button
-                  key={connector.uid}
-                  type="button"
-                  disabled={connectStatus === 'pending'}
-                  onClick={() => {
-                    connect({ connector });
-                    setShowConnectModal(false);
-                  }}
-                  className="w-full py-3 px-4 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(99,102,241,0.13)] text-left font-medium text-white transition-colors disabled:opacity-50"
-                >
-                  {connector.name}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-onClick={() => setShowConnectModal(false)}
-            className="mt-4 w-full py-2 text-[#94a3b8] text-sm hover:text-white"
-          >
-            {t('close')}
-          </button>
-        </div>
-      </div>
-      )}
+      <WalletConnectModal
+        open={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        connectors={connectors}
+        connect={connect}
+        reset={resetConnect}
+        isPending={isConnectPending}
+      />
       <AdModal
         isOpen={showAdModal}
         onComplete={handleAdComplete}

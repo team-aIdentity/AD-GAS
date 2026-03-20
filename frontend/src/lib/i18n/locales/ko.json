@@ -10,6 +10,8 @@
   "walletBalanceDesc": "현재 연결된 지갑의 잔액 정보",
   "walletEoa": "지갑 (EOA)",
   "connectWalletPlease": "지갑을 연결해주세요.",
+  "walletConnect.waitingWallet": "지갑 앱에서 연결을 승인해 주세요…",
+  "walletConnect.cancelAttempt": "취소하고 닫기",
   "addressCopied": "주소가 복사되었습니다",
   "sharedPool": "공유 풀",
   "sendFree": "무료 전송하기",

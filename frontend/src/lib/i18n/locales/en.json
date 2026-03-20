@@ -10,6 +10,8 @@
   "walletBalanceDesc": "Balance of the connected wallet",
   "walletEoa": "Wallet (EOA)",
   "connectWalletPlease": "Connect your wallet.",
+  "walletConnect.waitingWallet": "Approve the request in your wallet…",
+  "walletConnect.cancelAttempt": "Cancel and close",
   "addressCopied": "Address copied",
   "sharedPool": "Shared pool",
   "sendFree": "Send for free",

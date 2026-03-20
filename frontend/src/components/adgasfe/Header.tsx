@@ -103,11 +103,11 @@ export function Header({ isConnected, walletAddress, onConnect, onDisconnect }: 
           <div className="flex items-center gap-4">
             <LanguageSwitcher />
             <WalletButton
-            isConnected={isConnected}
-            walletAddress={walletAddress}
-            onConnect={onConnect}
-            onDisconnect={onDisconnect}
-          />
+              isConnected={isConnected}
+              walletAddress={walletAddress}
+              onConnect={onConnect}
+              onDisconnect={onDisconnect}
+            />
           </div>
         </div>
       </div>

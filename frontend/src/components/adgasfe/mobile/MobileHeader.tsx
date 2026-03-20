@@ -19,10 +19,10 @@ function TitleGroup() {
   const { t } = useLocale();
   return (
     <div className="flex min-w-0 flex-1 flex-col items-start gap-px not-italic">
-      <p className="max-w-full truncate font-extrabold leading-tight text-[17px] text-white text-shadow-[0px_0px_16px_rgba(99,102,241,0.5)] sm:text-[18px]">
+      <p className="max-w-full truncate font-extrabold leading-tight text-[15px] text-white text-shadow-[0px_0px_16px_rgba(99,102,241,0.5)] sm:text-[17px]">
         AD GAS
       </p>
-      <p className="line-clamp-2 max-w-full text-[10px] font-semibold leading-snug text-[#a5b4fc] sm:text-[11px]">
+      <p className="line-clamp-2 max-w-full text-[9px] font-semibold leading-snug text-[#a5b4fc] sm:text-[10px]">
         {t('header.tagline')}
       </p>
     </div>
@@ -68,7 +68,7 @@ export function MobileHeader({
   const { t } = useLocale();
   return (
     <header className="relative w-full min-w-0 max-w-full shrink-0 overflow-x-hidden">
-      <div className="relative flex w-full min-w-0 max-w-full flex-col items-stretch gap-3 px-4 pb-4 pt-5 sm:px-5">
+      <div className="relative flex w-full min-w-0 max-w-full flex-col items-stretch gap-3 px-[calc(1rem+10px)] pb-4 pt-5 sm:px-[calc(1.25rem+10px)]">
         {/* 1행: 로고+제목(가변) | 지갑(고정 44px) — 언어는 아래로 분리해 가로 오버플로 방지 */}
         <div className="flex w-full min-w-0 items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -95,10 +95,10 @@ export function MobileHeader({
             <div className="content-stretch flex flex-1 flex-col gap-1 items-center min-h-px min-w-px relative">
               <p className="font-normal leading-6 relative shrink-0 text-[20px] text-white">💰</p>
               <div className="content-stretch flex flex-col gap-px items-center relative shrink-0">
-                <p className="font-extrabold leading-[21.6px] relative shrink-0 text-[18px] text-shadow-[0px_0px_12px_rgba(16,185,129,0.38)] text-white">
+                <p className="font-extrabold leading-[19px] relative shrink-0 text-[16px] text-shadow-[0px_0px_12px_rgba(16,185,129,0.38)] text-white">
                   $1,234
                 </p>
-                <p className="font-semibold leading-[13.2px] relative shrink-0 text-[#94a3b8] text-[11px]">
+                <p className="font-semibold leading-[12px] relative shrink-0 text-[#94a3b8] text-[10px]">
                   {t('mobile.savingsTotal')}
                 </p>
               </div>
@@ -106,10 +106,10 @@ export function MobileHeader({
             <div className="content-stretch flex flex-1 flex-col gap-1 items-center min-h-px min-w-px relative">
               <p className="font-normal leading-6 relative shrink-0 text-[20px] text-white">⚡</p>
               <div className="content-stretch flex flex-col gap-px items-center relative shrink-0">
-                <p className="font-extrabold leading-[21.6px] relative shrink-0 text-[18px] text-shadow-[0px_0px_12px_rgba(245,158,11,0.38)] text-white">
+                <p className="font-extrabold leading-[19px] relative shrink-0 text-[16px] text-shadow-[0px_0px_12px_rgba(245,158,11,0.38)] text-white">
                   {freeTransactionsUsed}
                 </p>
-                <p className="font-semibold leading-[13.2px] relative shrink-0 text-[#94a3b8] text-[11px]">
+                <p className="font-semibold leading-[12px] relative shrink-0 text-[#94a3b8] text-[10px]">
                   {t('mobile.transactions')}
                 </p>
               </div>
@@ -117,10 +117,10 @@ export function MobileHeader({
             <div className="content-stretch flex flex-1 flex-col gap-1 items-center min-h-px min-w-px relative">
               <p className="font-normal leading-6 relative shrink-0 text-[20px] text-white">🌐</p>
               <div className="content-stretch flex flex-col gap-px items-center relative shrink-0">
-                <p className="font-extrabold leading-[21.6px] relative shrink-0 text-[18px] text-shadow-[0px_0px_12px_rgba(59,130,246,0.38)] text-white">
+                <p className="font-extrabold leading-[19px] relative shrink-0 text-[16px] text-shadow-[0px_0px_12px_rgba(59,130,246,0.38)] text-white">
                   {SUPPORTED_NETWORKS.length}
                 </p>
-                <p className="font-semibold leading-[13.2px] relative shrink-0 text-[#94a3b8] text-[11px]">
+                <p className="font-semibold leading-[12px] relative shrink-0 text-[#94a3b8] text-[10px]">
                   {t('mobile.supportedChains')}
                 </p>
               </div>
