@@ -1,16 +1,17 @@
 import { http, createConfig } from 'wagmi'
 import { mainnet, base, baseSepolia, avalanche, bsc } from 'wagmi/chains'
-import { injected, metaMask, walletConnect } from 'wagmi/connectors'
+import { injected, metaMask } from 'wagmi/connectors'
+import { openMetaMaskDeeplink } from '@/lib/metamaskOpenDeeplink'
 
 // 지원 체인: 이더리움 메인넷 / Base 메인넷 / Base Sepolia / Avalanche / BNB (5개)
-// MetaMask SDK: 모바일/WebView에서 딥링크로 MetaMask 앱 연결 (dappMetadata.url 필수에 가깝게 설정)
-// WalletConnect: https://cloud.walletconnect.com projectId
-const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
-
+// MetaMask만 사용 (@metamask/sdk 딥링크 / 확장). dappMetadata.url 은 실제 접속 origin 과 맞추는 것이 안전합니다.
 const dappMetadataUrl =
   (process.env.NEXT_PUBLIC_APP_URL?.trim() && process.env.NEXT_PUBLIC_APP_URL.trim()) ||
   (process.env.VERCEL_URL?.trim() && `https://${process.env.VERCEL_URL.trim()}`) ||
   'https://ad-gas.vercel.app'
+
+/** false면 유니버설 링크(https://metamask.app/...) 위주 — WebView에서 커스텀 스킴보다 나을 때가 있음 */
+const metamaskUseDeeplink = process.env.NEXT_PUBLIC_METAMASK_USE_DEEPLINK !== 'false'
 
 const RPC_URLS: Record<number, string> = {
   [mainnet.id]: process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://eth.llamarpc.com',
@@ -22,16 +23,16 @@ const RPC_URLS: Record<number, string> = {
 
 export const config = createConfig({
   chains: [mainnet, base, baseSepolia, avalanche, bsc],
-  // MetaMask 먼저(모바일 딥링크) → WC(다른 지갑) → 브라우저 주입
   connectors: [
     metaMask({
       dappMetadata: {
         name: 'AD GAS',
         url: dappMetadataUrl,
       },
-      useDeeplink: true,
+      preferDesktop: false,
+      useDeeplink: metamaskUseDeeplink,
+      openDeeplink: openMetaMaskDeeplink,
     }),
-    walletConnect({ projectId }),
     injected(),
   ],
   transports: {
@@ -44,7 +45,6 @@ export const config = createConfig({
   ssr: true,
 })
 
-// Wagmi 타입 확장
 declare module 'wagmi' {
   interface Register {
     config: typeof config

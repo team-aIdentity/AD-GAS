@@ -5,11 +5,7 @@ import type { Connector, UseConnectReturnType } from 'wagmi';
 import { config } from '@/wagmi.config';
 import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
-import {
-  isNonInjectedWalletContext,
-  isWalletConnectProjectConfigured,
-  orderConnectorsForEnvironment,
-} from '@/lib/walletConnectEnvironment';
+import { isNonInjectedWalletContext, orderConnectorsForEnvironment } from '@/lib/walletConnectEnvironment';
 
 /** 프로젝트 `Register.config`와 동일한 Connect 뮤테이션 타입 (기본 `Config`와 불일치 방지) */
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
@@ -39,9 +35,6 @@ export function WalletConnectModal({
     () => orderConnectorsForEnvironment(connectors),
     [connectors]
   );
-  const wcConfigured = isWalletConnectProjectConfigured();
-  const showWcProjectWarning =
-    !wcConfigured && visibleConnectors.some(c => c.id === 'walletConnect');
 
   if (!open) return null;
 
@@ -58,9 +51,6 @@ export function WalletConnectModal({
           <p className="mb-3 rounded-lg border border-[rgba(99,102,241,0.25)] bg-[rgba(99,102,241,0.08)] px-3 py-2 text-xs leading-snug text-[#c7d2fe]">
             {t('walletConnect.metamaskDeepLinkHint')}
           </p>
-        )}
-        {showWcProjectWarning && (
-          <p className="mb-3 text-sm text-amber-200/90">{t('walletConnect.missingProjectId')}</p>
         )}
         {isPending && (
           <p className="mb-3 text-sm text-[#94a3b8]">{t('walletConnect.waitingWallet')}</p>
