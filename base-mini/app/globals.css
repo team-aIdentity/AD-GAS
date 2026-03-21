@@ -1,0 +1,13 @@
+@import "tailwindcss";
+/* OnchainKit은 Tailwind v4로 빌드된 CSS를 씁니다. 같은 PostCSS(v4) 파이프라인에서 불러와야 합니다. */
+@import "@coinbase/onchainkit/styles.css";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}

@@ -1,0 +1,8 @@
+{
+  "miniapp": {
+    "version": "1",
+    "name": "AD-GAS",
+    "homeUrl": "https://YOUR_DEPLOYMENT_DOMAIN",
+    "iconUrl": "https://YOUR_DEPLOYMENT_DOMAIN/logo.png"
+  }
+}
