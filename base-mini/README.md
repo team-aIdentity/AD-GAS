@@ -113,7 +113,7 @@ AD-GAS 레포가 GitHub/GitLab 등에 있어야 합니다. (아직이면 `git in
 ## 스타일 / 빌드 (Tailwind · OnchainKit)
 
 - **OnchainKit `styles.css`는 Tailwind v4 전용**이라, 이 프로젝트도 **Tailwind v4 + `@tailwindcss/postcss`** 를 사용합니다. (v3만 쓰면 `@layer base` 관련 빌드 에러가 납니다.)
-- OnchainKit 스타일은 `app/globals.css`에서 `@import "@coinbase/onchainkit/styles.css";` 로만 불러옵니다. `providers.tsx`에서는 중복 import 하지 않습니다.
+- OnchainKit 스타일은 `app/globals.css`에서 `@import "@coinbase/onchainkit/styles.css";` 로만 불러옵니다. **`@import "tailwindcss"` 보다 위에** 두어야 Google Fonts `@import` 순서 경고가 나지 않습니다. `providers.tsx`에서는 중복 import 하지 않습니다.
 
 ### `Cannot find native binding` (@tailwindcss/oxide)
 
