@@ -13,9 +13,16 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/** Base Build / 미니앱에서 요구하는 앱 식별 메타. Vercel 등에서는 `NEXT_PUBLIC_BASE_APP_ID`로 덮어쓸 수 있음. */
+const baseAppId =
+  process.env.NEXT_PUBLIC_BASE_APP_ID ?? "69be497efa9c0ad39d2bcba7";
+
 export const metadata: Metadata = {
   title: "AD-GAS · Base Mini App",
   description: "AD-GAS Base 미니앱",
+  other: {
+    "base:app_id": baseAppId,
+  },
 };
 
 export default function RootLayout({
