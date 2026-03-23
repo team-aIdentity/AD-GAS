@@ -1,0 +1,47 @@
+{
+  "name": "ad-gas-transaction-sdk",
+  "version": "0.1.0",
+  "description": "B2B SDK: ad-gated sponsored transactions (gasless relay) for AD-GAS platform partners",
+  "license": "MIT",
+  "author": "team-aIdentity",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/team-aIdentity/AD-GAS-Transaction-SDK.git"
+  },
+  "keywords": [
+    "ad-gas",
+    "gasless",
+    "sponsored-transaction",
+    "relayer",
+    "evm",
+    "web3",
+    "b2b"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "peerDependencies": {},
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -400,4 +400,17 @@ LP → Click "Provide liquidity"
 3. Define **initial liquidity** strategy
 4. Plan **security audit**
 
+---
+
+## 13. Related — B2B Transaction SDK (npm)
+
+파트너 dApp/지갑에 판매·배포하는 **광고 기반 대납 트랜잭션 SDK** 는 별도 제품으로 정리한다.
+
+| 항목 | 위치 |
+|------|------|
+| **v0 스펙 (API·아키텍처·로드맵)** | [`docs/AD-GAS-Transaction-SDK-B2B-v0.md`](./AD-GAS-Transaction-SDK-B2B-v0.md) |
+| **GitHub (npm 배포 원본 권장)** | `https://github.com/team-aIdentity/AD-GAS-Transaction-SDK` |
+| **모노레포 스캐폴드** | `web/ad-gas-transaction-sdk/` — 개발 후 위 레포와 동기화 |
+| **레거시 호환 클라이언트** | `web/src/core/AdWalletRelayerSDK.ts` (상대 경로 `/api` 기본값) |
+
 This document defines the plan for **Type 1+2 integration + free swap pool**.
