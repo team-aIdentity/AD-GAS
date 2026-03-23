@@ -413,4 +413,11 @@ LP → Click "Provide liquidity"
 | **모노레포 스캐폴드** | `web/ad-gas-transaction-sdk/` — 개발 후 위 레포와 동기화 |
 | **레거시 호환 클라이언트** | `web/src/core/AdWalletRelayerSDK.ts` (상대 경로 `/api` 기본값) |
 
+### Base Mini App (별도 레포)
+
+| 항목 | 위치 |
+|------|------|
+| **GitHub (배포·이슈 기준)** | `https://github.com/team-aIdentity/AD-GAS-BASEAPP` |
+| **모노레포 미러** | `web/base-mini/` — 단독 레포와 동기화 권장 |
+
 This document defines the plan for **Type 1+2 integration + free swap pool**.

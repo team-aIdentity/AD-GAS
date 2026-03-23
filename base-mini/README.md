@@ -1,7 +1,29 @@
 # AD-GAS Base Mini App
 
-[OnchainKit](https://onchainkit.xyz) + **MiniKit** 기반의 **Base / Farcaster 미니앱**용 Next.js 앱입니다.  
-메인 웹앱은 `web/frontend`를 그대로 두고, 미니앱 전용 UI·진입점만 이 패키지에서 다룹니다.
+[OnchainKit](https://onchainkit.xyz) + **MiniKit** 기반의 **Base / Farcaster 미니앱**용 Next.js 앱입니다.
+
+## 공개 저장소 (권장)
+
+배포·이슈·PR의 기준 레포:
+
+**https://github.com/team-aIdentity/AD-GAS-BASEAPP**
+
+AD-GAS 모노레포(`team-aIdentity/AD-GAS`) 안의 `web/base-mini/` 는 위 레포와 **동일 코드를 미러**해 두는 용도로 쓸 수 있습니다. 기능 추가 후 한쪽에 맞춰 동기화하세요.
+
+### `AD-GAS-BASEAPP`에 처음 올릴 때 (로컬)
+
+모노레포에서 이 폴더만 새 레포로 푸시하려면 예시는 다음과 같습니다.
+
+```bash
+cd web/base-mini
+git init -b main
+git remote add origin https://github.com/team-aIdentity/AD-GAS-BASEAPP.git
+git add .
+git commit -m "chore: initial Base Mini App"
+git push -u origin main
+```
+
+이미 `AD-GAS-BASEAPP`에 README만 있다면 `git pull origin main --allow-unrelated-histories` 후 정리하거나, 빈 레포라면 위처럼 바로 push 하면 됩니다.
 
 ## 요구 사항
 
@@ -32,18 +54,29 @@
 
 ## Vercel로 배포 (Base Mini App)
 
-**같은 레포(모노레포) 그대로** 두고, Vercel에서 **이 폴더만** 루트로 잡아 배포하면 됩니다. 별도 레포는 필요 없습니다.
+### 방식 A — **`AD-GAS-BASEAPP` 단독 레포** (권장)
 
-### 1. Git에 올리기
+1. [vercel.com](https://vercel.com) → **Import** `https://github.com/team-aIdentity/AD-GAS-BASEAPP`
+2. **Root Directory**: 비워 둠 (저장소 루트가 곧 Next 앱)
+3. Framework: **Next.js**
+4. 환경 변수·Deploy (아래 3~5절 동일)
 
-AD-GAS 레포가 GitHub/GitLab 등에 있어야 합니다. (아직이면 `git init` → 원격 추가 → push)
+### 방식 B — AD-GAS **모노레포**만 쓰는 경우
 
-### 2. Vercel에서 프로젝트 만들기
+1. Import 저장소: `team-aIdentity/AD-GAS`
+2. **Root Directory**: `web/base-mini` (**필수**)
+3. Framework: **Next.js**
+
+### 1. Git
+
+- 단독 레포: `AD-GAS-BASEAPP` 에 push  
+- 모노레포: `AD-GAS` 의 `web/base-mini` 경로 유지
+
+### 2. Vercel 공통 설정
 
 1. [vercel.com](https://vercel.com) 로그인 → **Add New… → Project**
-2. 해당 Git 저장소 **Import**
-3. **가장 중요:** **Root Directory**를 `web/base-mini` 로 설정  
-   (비워 두면 상위에 `package.json`이 없어 빌드가 실패할 수 있음)
+2. 위 A 또는 B에 맞는 저장소 **Import**
+3. **Root Directory** 는 A면 비움, B면 `web/base-mini`
 4. Framework Preset: **Next.js** (자동 감지)
 5. **Environment Variables**에 추가:
    - `NEXT_PUBLIC_ONCHAINKIT_API_KEY` = CDP OnchainKit 키 값

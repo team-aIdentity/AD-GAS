@@ -2,6 +2,11 @@
   "name": "ad-gas-base-mini",
   "version": "0.1.0",
   "private": true,
+  "description": "AD-GAS Base / Farcaster Mini App (OnchainKit + Next.js)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/team-aIdentity/AD-GAS-BASEAPP.git"
+  },
   "engines": {
     "node": "20.x"
   },
