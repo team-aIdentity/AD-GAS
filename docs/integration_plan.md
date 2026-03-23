@@ -409,7 +409,7 @@ LP → Click "Provide liquidity"
 | 항목 | 위치 |
 |------|------|
 | **v0 스펙 (API·아키텍처·로드맵)** | [`docs/AD-GAS-Transaction-SDK-B2B-v0.md`](./AD-GAS-Transaction-SDK-B2B-v0.md) |
-| **GitHub (npm 배포 원본 권장)** | `https://github.com/team-aIdentity/AD-GAS-Transaction-SDK` |
+| **GitHub (npm 배포 원본)** | `https://github.com/team-aIdentity/AD-GAS-Transction-SDK` |
 | **모노레포 스캐폴드** | `web/ad-gas-transaction-sdk/` — 개발 후 위 레포와 동기화 |
 | **레거시 호환 클라이언트** | `web/src/core/AdWalletRelayerSDK.ts` (상대 경로 `/api` 기본값) |
 

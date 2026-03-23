@@ -7,7 +7,9 @@ AD-GAS 플랫폼 파트너(dApp·지갑)가 npm으로 연동합니다.
 
 배포·이슈·PR의 기준 저장소:
 
-**https://github.com/team-aIdentity/AD-GAS-Transaction-SDK**
+**https://github.com/team-aIdentity/AD-GAS-Transction-SDK**
+
+> 레포 이름의 철자는 나중에 GitHub **Settings → General → Repository name** 에서 `AD-GAS-Transaction-SDK` 로 바꿀 수 있습니다. (npm·문서 검색에 유리)
 
 이 폴더(`web/ad-gas-transaction-sdk/`)는 AD-GAS 모노레포에서 개발한 뒤 위 레포와 동기화할 수 있습니다.
 

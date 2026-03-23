@@ -2,8 +2,9 @@
 
 > **한 줄**: dApp/지갑이 npm으로 붙여 **“트랜잭션 직전 광고 게이트 → 검증 후 가스 대납(릴레이)”** 을 표준화하는 클라이언트 SDK + 백엔드 계약.
 
-**공개 저장소(배포 원본)**: `https://github.com/team-aIdentity/AD-GAS-Transaction-SDK`  
-(레포명은 `Transaction` 철자 권장 — 검색·문서 일관성)
+**공개 저장소(배포 원본)**: `https://github.com/team-aIdentity/AD-GAS-Transction-SDK`  
+
+> 현재 레포명에 오타(`Transction`)가 있으면, GitHub **Settings → Repository name** 에서 `AD-GAS-Transaction-SDK` 로 변경하는 것을 권장합니다.
 
 **모노레포 내 스캐폴드**: `web/ad-gas-transaction-sdk/` — 위 GitHub와 동기화·복사하여 npm publish.
 
@@ -149,7 +150,7 @@ class AdGasTransactionClient {
 ## 8. 레포 동기화 워크플로
 
 1. AD-GAS 모노레포에서 `web/ad-gas-transaction-sdk/` 개발  
-2. 릴리스 시 `AD-GAS-Transaction-SDK` GitHub로 **mirror / copy** 후 태그  
+2. 릴리스 시 `AD-GAS-Transction-SDK` GitHub로 **mirror / copy** 후 태그  
 3. `npm publish` 는 공개 레포 CI에서 실행 (권장)
 
 ---
