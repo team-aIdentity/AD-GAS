@@ -22,6 +22,7 @@ export const metadata: Metadata = {
   description: "AD-GAS Base 미니앱",
   other: {
     "base:app_id": baseAppId,
+    "google-adsense-account": "ca-pub-1201899929581374",
   },
 };
 
