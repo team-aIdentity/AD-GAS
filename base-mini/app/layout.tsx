@@ -20,10 +20,6 @@ const baseAppId =
 export const metadata: Metadata = {
   title: "AD-GAS · Base Mini App",
   description: "AD-GAS Base 미니앱",
-  other: {
-    "base:app_id": baseAppId,
-    "google-adsense-account": "ca-pub-1201899929581374",
-  },
 };
 
 export default function RootLayout({
@@ -33,6 +29,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        <meta name="base:app_id" content={baseAppId} />
+        <meta name="google-adsense-account" content="ca-pub-1201899929581374" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} min-h-dvh antialiased`}>
         <Providers>{children}</Providers>
       </body>
