@@ -7,7 +7,7 @@ import {
   useDisconnect,
   useWalletClient,
   useSwitchChain,
-  useBalance,
+  useReadContracts,
   usePublicClient,
   useWriteContract,
 } from 'wagmi';
@@ -15,8 +15,8 @@ import { formatUnits, parseUnits, encodePacked, keccak256, getAddress, maxUint25
 import { Toaster } from 'sonner';
 import { toast } from 'sonner';
 import { AdWalletRelayerSDK } from '../../../../src';
-import { SUPPORTED_NETWORKS } from '@/lib/networks';
-import { TOKEN_ADDRESSES, TOKEN_INFO, PERMIT_TOKEN_CONFIG } from '@/lib/tokens';
+import { SUPPORTED_NETWORKS, DEFAULT_NETWORK } from '@/lib/networks';
+import { getChainTokens, findChainToken } from '@/lib/tokens';
 import { erc20Abi } from 'viem';
 import type { Network, Token } from '@/types/adgasfe';
 import { Header } from './Header';
@@ -104,7 +104,7 @@ export function GaslessApp() {
   const [isMobile, setIsMobile] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
 
-  const [, setSelectedNetwork] = useState<Network>(SUPPORTED_NETWORKS[1]);
+  const [, setSelectedNetwork] = useState<Network>(DEFAULT_NETWORK);
   const [activeTab, setActiveTab] = useState<'send' | 'transaction'>('send');
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('0.0001');
@@ -166,49 +166,32 @@ export function GaslessApp() {
 
   const chainId = walletClient?.chain?.id;
   const currentNetwork =
-    SUPPORTED_NETWORKS.find(n => n.chainId === chainId) ?? SUPPORTED_NETWORKS[1];
+    SUPPORTED_NETWORKS.find(n => n.chainId === chainId) ?? DEFAULT_NETWORK;
 
-  // USDC, USDT 잔액 조회 (ERC20만 지원, 네이티브 토큰 제외)
-  const tokenAddresses = chainId ? TOKEN_ADDRESSES[chainId] : null;
-  const { data: usdcBalanceData, isLoading: usdcLoading } = useBalance({
-    address: address ?? undefined,
-    token: tokenAddresses?.USDC,
-    chainId: chainId ?? undefined,
-    query: { enabled: !!address && !!chainId && !!tokenAddresses?.USDC },
-  });
-  const { data: usdtBalanceData, isLoading: usdtLoading } = useBalance({
-    address: address ?? undefined,
-    token: tokenAddresses?.USDT,
-    chainId: chainId ?? undefined,
-    query: { enabled: !!address && !!chainId && !!tokenAddresses?.USDT },
+  // 체인별 지원 토큰 잔액 조회 (ERC20 멀티콜, 네이티브 토큰 제외)
+  const chainTokens = getChainTokens(chainId);
+  const { data: balanceResults, isLoading: eoaBalanceLoading } = useReadContracts({
+    contracts: chainTokens.map((tk) => ({
+      address: tk.address,
+      abi: erc20Abi,
+      functionName: 'balanceOf' as const,
+      args: address ? [address] : undefined,
+      chainId,
+    })),
+    query: { enabled: !!address && !!chainId && chainTokens.length > 0 },
   });
 
-  const eoaBalanceLoading = usdcLoading || usdtLoading;
-
-  // ERC20만 (USDC, USDT) - 네이티브 토큰 제거
-  const availableTokens: Token[] = [];
-  if (tokenAddresses?.USDC) {
-    availableTokens.push({
-      symbol: 'USDC',
-      name: TOKEN_INFO.USDC.name,
-      balance: usdcBalanceData
-        ? Number(formatUnits(usdcBalanceData.value, TOKEN_INFO.USDC.decimals))
-        : 0,
-      decimals: TOKEN_INFO.USDC.decimals,
-      usdPrice: TOKEN_INFO.USDC.usdPrice,
-    });
-  }
-  if (tokenAddresses?.USDT) {
-    availableTokens.push({
-      symbol: 'USDT',
-      name: TOKEN_INFO.USDT.name,
-      balance: usdtBalanceData
-        ? Number(formatUnits(usdtBalanceData.value, TOKEN_INFO.USDT.decimals))
-        : 0,
-      decimals: TOKEN_INFO.USDT.decimals,
-      usdPrice: TOKEN_INFO.USDT.usdPrice,
-    });
-  }
+  const availableTokens: Token[] = chainTokens.map((tk, i) => {
+    const raw = balanceResults?.[i]?.result as bigint | undefined;
+    return {
+      symbol: tk.symbol,
+      name: tk.name,
+      balance: raw !== undefined ? Number(formatUnits(raw, tk.decimals)) : 0,
+      decimals: tk.decimals,
+      usdPrice: tk.usdPrice,
+      category: tk.category,
+    };
+  });
 
   // selectedToken이 없거나 availableTokens에 없으면 첫 번째 토큰으로 설정
   useEffect(() => {
@@ -228,16 +211,14 @@ export function GaslessApp() {
   const getContractAddress = useCallback((): `0x${string}` | undefined => {
     if (!chainId) return undefined;
     switch (chainId) {
-      case 1:
-        return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_ETH as `0x${string}`;
       case 8453:
         return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE as `0x${string}`;
       case 43114:
         return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE as `0x${string}`;
       case 56:
         return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB as `0x${string}`;
-      case 84532:
-        return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA as `0x${string}`;
+      case 91342:
+        return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA as `0x${string}`;
       default:
         return undefined;
     }
@@ -260,10 +241,15 @@ export function GaslessApp() {
 
   const handleNetworkChange = useCallback(
     async (network: Network) => {
+      if (network.enabled === false) {
+        toast.info(`${network.name}은(는) 준비 중입니다. 곧 지원할 예정이에요.`);
+        return;
+      }
       setSelectedNetwork(network);
       try {
-        const supportedChainId = network.chainId as 1 | 8453 | 84532 | 43114 | 56;
-        await switchChainAsync({ chainId: supportedChainId });
+        await switchChainAsync({
+          chainId: network.chainId as 8453 | 91342 | 43114 | 56,
+        });
         toast.success(t('toast.networkSwitched', { name: network.name }));
       } catch {
         toast.error(t('toast.networkSwitchFailed'));
@@ -290,9 +276,6 @@ export function GaslessApp() {
       // 컨트랙트 주소 조회 (체인별 환경 변수)
       let contractAddress: `0x${string}` | undefined;
       switch (chainId) {
-        case 1:
-          contractAddress = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_ETH as `0x${string}`;
-          break;
         case 8453:
           contractAddress = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE as `0x${string}`;
           break;
@@ -303,9 +286,9 @@ export function GaslessApp() {
         case 56:
           contractAddress = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB as `0x${string}`;
           break;
-        case 84532:
+        case 91342:
           contractAddress = process.env
-            .NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA as `0x${string}`;
+            .NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA as `0x${string}`;
           break;
       }
       if (!contractAddress) {
@@ -358,20 +341,15 @@ export function GaslessApp() {
         );
       }
 
-      // ERC20만 지원 (USDC, USDT)
-      const tokenAddresses = TOKEN_ADDRESSES[chainId];
-      if (!tokenAddresses || (selectedToken.symbol !== 'USDC' && selectedToken.symbol !== 'USDT')) {
+      // 체인별 지원 토큰 (ERC20)
+      const tokenDef = findChainToken(chainId, selectedToken.symbol);
+      if (!tokenDef) {
         throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
       }
-      const tokenAddress =
-        selectedToken.symbol === 'USDC' ? tokenAddresses.USDC : tokenAddresses.USDT;
-      if (!tokenAddress) {
-        throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
-      }
-      const tokenInfo = TOKEN_INFO[selectedToken.symbol];
-      const amountUnits = parseUnits(pendingTransaction.amount, tokenInfo.decimals);
+      const tokenAddress = tokenDef.address;
+      const amountUnits = parseUnits(pendingTransaction.amount, tokenDef.decimals);
 
-      const permitConfig = PERMIT_TOKEN_CONFIG[chainId]?.[selectedToken.symbol as 'USDC' | 'USDT'];
+      const permitConfig = tokenDef.permit;
       const supportsPermit = !!permitConfig;
 
       let permitSignature: string | undefined;
@@ -527,7 +505,7 @@ export function GaslessApp() {
         from: address as `0x${string}`,
         to: pendingTransaction.to as `0x${string}`,
         amount: pendingTransaction.amount,
-        tokenSymbol: selectedToken.symbol as 'USDC' | 'USDT',
+        tokenSymbol: selectedToken.symbol,
         chainId,
         signature,
         nonce: Number(nonce),
@@ -878,12 +856,12 @@ export function GaslessApp() {
                             href={
                               tx.chainId === 43114
                                 ? `https://snowtrace.io/tx/${tx.hash}`
-                                : tx.chainId === 1
-                                  ? `https://etherscan.io/tx/${tx.hash}`
-                                  : tx.chainId === 8453
-                                    ? `https://basescan.org/tx/${tx.hash}`
-                                    : tx.chainId === 56
-                                      ? `https://bscscan.com/tx/${tx.hash}`
+                                : tx.chainId === 8453
+                                  ? `https://basescan.org/tx/${tx.hash}`
+                                  : tx.chainId === 56
+                                    ? `https://bscscan.com/tx/${tx.hash}`
+                                    : tx.chainId === 91342
+                                      ? `https://sepolia-explorer.giwa.io/tx/${tx.hash}`
                                       : '#'
                             }
                             target="_blank"

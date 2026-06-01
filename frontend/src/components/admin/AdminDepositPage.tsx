@@ -16,24 +16,20 @@ import { injected } from 'wagmi/connectors';
 import { useLocale } from '@/contexts/LocaleContext';
 
 // Admin 예치 지원 체인
-const ADMIN_CHAIN_IDS = [1, 8453, 56, 43114, 84532] as const;
+const ADMIN_CHAIN_IDS = [8453, 56, 43114, 91342] as const;
 type AdminChainId = (typeof ADMIN_CHAIN_IDS)[number];
 
 const ADMIN_CHAINS = [
-  { chainId: 1, label: 'ETH', nativeToken: 'ETH', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_ETH' as const },
   { chainId: 8453, label: 'BASE', nativeToken: 'ETH', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE' as const },
   { chainId: 56, label: 'BNB', nativeToken: 'BNB', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB' as const },
   { chainId: 43114, label: 'AVAX', nativeToken: 'AVAX', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE' as const },
-  { chainId: 84532, label: 'Base Sepolia', nativeToken: 'ETH', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA' as const },
+  { chainId: 91342, label: 'GIWA Sepolia', nativeToken: 'ETH', envKey: 'NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA' as const },
 ] as const;
 
 // Next.js는 process.env.XXX 같은 정적 참조만 빌드 시 인라인함. 동적 키(process.env[key])는 인라인되지 않음.
 function getContractAddress(chainId: number): `0x${string}` | null {
   let addr: string | undefined;
   switch (chainId) {
-    case 1:
-      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_ETH;
-      break;
     case 8453:
       addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE;
       break;
@@ -43,8 +39,8 @@ function getContractAddress(chainId: number): `0x${string}` | null {
     case 43114:
       addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE;
       break;
-    case 84532:
-      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA;
+    case 91342:
+      addr = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA;
       break;
     default:
       return null;
@@ -90,7 +86,7 @@ export function AdminDepositPage() {
   const { address, status: accountStatus } = useAccount();
   // 재연결 중에는 연결된 것처럼 보이지 않도록
   const isConnected = accountStatus === 'connected' && !!address;
-  const { connect, status: connectStatus, error: connectError } = useConnect();
+  const { connect, connectors, status: connectStatus, error: connectError } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
 
@@ -138,16 +134,50 @@ export function AdminDepositPage() {
   });
 
   // 관리자 주소 (임시 하드코딩 - 컨트랙트 재배포 전까지 사용)
-  const EXPECTED_ADMIN_ADDRESS = '0x39f1E010fB6832DbF81Da5eB2FF8f631987A212D';
+  // 2026-06: 이전 키(0x39f1E010..212D) 탈취(EIP-7702 스위퍼)로 폐기 → 본인 지갑으로 교체
+  const EXPECTED_ADMIN_ADDRESS = '0xb891EA232e0AA00319FC9e0985b119Cd40b54693';
 
   // 컨트랙트에서 읽은 관리자 주소가 있으면 사용, 없으면 하드코딩된 주소 사용
   const actualAdminAddress = adminAddress || EXPECTED_ADMIN_ADDRESS;
   const isAdmin = address && address.toLowerCase() === actualAdminAddress.toLowerCase();
 
-  // 지갑 연결: wagmi connect만 사용 (MetaMask 팝업은 wagmi가 처리)
-  const handleConnect = useCallback(() => {
-    connect({ connector: injected() });
-  }, [connect]);
+  // 지갑 연결: 연결 전에 MetaMask 계정 선택창을 강제로 띄워, 이미 연결돼 있어도
+  // 원하는 관리자 계정(0xb891)을 매번 직접 고를 수 있게 한다.
+  const handleConnect = useCallback(async () => {
+    // 지갑이 여러 개 설치된 환경에서 window.ethereum이 MetaMask가 아닐 수 있으므로
+    // EIP-6963로 발견된 MetaMask 커넥터를 명시적으로 선택한다.
+    const metaMaskConnector =
+      connectors.find((c) => c.id === 'io.metamask') ||
+      connectors.find((c) => /metamask/i.test(c.name)) ||
+      connectors.find((c) => c.id === 'metaMaskSDK' || c.type === 'metaMask');
+    const connector = metaMaskConnector || connectors.find((c) => c.id === 'injected') || injected();
+
+    // MetaMask 공급자에 직접 권한 재요청 → 계정 선택 팝업 표시 (다른 지갑 무시)
+    try {
+      const provider = (await metaMaskConnector?.getProvider()) as
+        | { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
+        | undefined;
+      if (provider?.request) {
+        await provider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      }
+    } catch {
+      // 사용자가 선택창을 닫음(취소) → 연결 중단
+      return;
+    }
+
+    // 기존 연결을 끊고 새로 연결해야 방금 고른 계정이 반영됨
+    if (isConnected) {
+      try {
+        disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+    connect({ connector });
+  }, [connect, connectors, disconnect, isConnected]);
 
   // 연결 해제
   const handleDisconnect = useCallback(() => {

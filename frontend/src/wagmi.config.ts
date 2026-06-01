@@ -1,9 +1,10 @@
 import { http, createConfig } from 'wagmi'
-import { mainnet, base, baseSepolia, avalanche, bsc } from 'wagmi/chains'
+import { base, avalanche, bsc } from 'wagmi/chains'
 import { injected, metaMask, walletConnect } from 'wagmi/connectors'
 import { openMetaMaskDeeplink } from '@/lib/metamaskOpenDeeplink'
+import { giwaSepolia } from '@/lib/chains/giwaSepolia'
 
-// 지원 체인: 이더리움 메인넷 / Base 메인넷 / Base Sepolia / Avalanche / BNB (5개)
+// 지원 체인: Base 메인넷 / GIWA Sepolia / Avalanche / BNB (4개)
 // Capacitor WebView: WalletConnect → MetaMask. 데스크톱: MetaMask SDK + Injected (UI에서 WC 숨김)
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
 
@@ -15,15 +16,15 @@ const dappMetadataUrl =
 const metamaskUseDeeplink = process.env.NEXT_PUBLIC_METAMASK_USE_DEEPLINK !== 'false'
 
 const RPC_URLS: Record<number, string> = {
-  [mainnet.id]: process.env.NEXT_PUBLIC_RPC_MAINNET || 'https://eth.llamarpc.com',
   [base.id]: process.env.NEXT_PUBLIC_RPC_BASE || 'https://mainnet.base.org',
-  [baseSepolia.id]: process.env.NEXT_PUBLIC_RPC_BASE_SEPOLIA || 'https://sepolia.base.org',
+  [giwaSepolia.id]:
+    process.env.NEXT_PUBLIC_RPC_GIWA_SEPOLIA || 'https://sepolia-rpc.giwa.io',
   [avalanche.id]: process.env.NEXT_PUBLIC_RPC_AVALANCHE || 'https://api.avax.network/ext/bc/C/rpc',
   [bsc.id]: process.env.NEXT_PUBLIC_RPC_BNB || 'https://bsc-dataseed.binance.org',
 }
 
 export const config = createConfig({
-  chains: [mainnet, base, baseSepolia, avalanche, bsc],
+  chains: [base, giwaSepolia, avalanche, bsc],
   connectors: [
     walletConnect({ projectId }),
     metaMask({
@@ -38,9 +39,8 @@ export const config = createConfig({
     injected(),
   ],
   transports: {
-    [mainnet.id]: http(RPC_URLS[mainnet.id]),
     [base.id]: http(RPC_URLS[base.id]),
-    [baseSepolia.id]: http(RPC_URLS[baseSepolia.id]),
+    [giwaSepolia.id]: http(RPC_URLS[giwaSepolia.id]),
     [avalanche.id]: http(RPC_URLS[avalanche.id]),
     [bsc.id]: http(RPC_URLS[bsc.id]),
   },

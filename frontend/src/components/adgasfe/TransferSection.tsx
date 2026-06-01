@@ -127,21 +127,35 @@ export function TransferSection({
                 </button>
 
                 {showTokenSelect && (
-                  <div className="absolute top-full mt-2 w-full bg-[#1e293b] border border-[rgba(255,255,255,0.08)] rounded-2xl shadow-lg z-10 overflow-hidden">
-                    {availableTokens.map(token => (
-                      <button
-                        type="button"
-                        key={token.symbol}
-                        onClick={() => {
-                          onTokenChange(token);
-                          setShowTokenSelect(false);
-                        }}
-                        className="w-full px-5 py-3 text-left hover:bg-[rgba(99,102,241,0.13)] transition-colors flex justify-between items-center"
-                      >
-                        <span className="text-[#e2e8f0] font-medium">{token.symbol}</span>
-                        <span className="text-[#94a3b8] text-sm">{token.balance.toFixed(4)}</span>
-                      </button>
-                    ))}
+                  <div className="absolute top-full mt-2 w-full bg-[#1e293b] border border-[rgba(255,255,255,0.08)] rounded-2xl shadow-lg z-10 overflow-hidden max-h-80 overflow-y-auto">
+                    {(['stablecoin', 'token'] as const).map(category => {
+                      const group = availableTokens.filter(tk => tk.category === category);
+                      if (group.length === 0) return null;
+                      return (
+                        <div key={category}>
+                          <p className="px-5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-[#64748b]">
+                            {t(`category.${category}`)}
+                          </p>
+                          {group.map(token => (
+                            <button
+                              type="button"
+                              key={token.symbol}
+                              onClick={() => {
+                                onTokenChange(token);
+                                setShowTokenSelect(false);
+                              }}
+                              className="w-full px-5 py-3 text-left hover:bg-[rgba(99,102,241,0.13)] transition-colors flex justify-between items-center"
+                            >
+                              <span className="text-[#e2e8f0] font-medium">
+                                {token.symbol}
+                                <span className="text-[#64748b] text-xs ml-2">{token.name}</span>
+                              </span>
+                              <span className="text-[#94a3b8] text-sm">{token.balance.toFixed(4)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

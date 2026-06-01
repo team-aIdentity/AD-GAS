@@ -7,9 +7,10 @@ import {
   getAddress,
   hexToSignature,
 } from 'viem';
-import { mainnet, base, avalanche, bsc, baseSepolia } from 'viem/chains';
+import { base, avalanche, bsc } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
-import { TOKEN_ADDRESSES, TOKEN_INFO } from '@/lib/tokens';
+import { findChainToken } from '@/lib/tokens';
+import { giwaSepolia } from '@/lib/chains/giwaSepolia';
 
 // 컨트랙트 ABI
 const SPONSORED_TRANSFER_ABI = [
@@ -56,14 +57,13 @@ const SPONSORED_TRANSFER_ABI = [
   },
 ] as const;
 
-type SupportedChainId = 1 | 8453 | 43114 | 56 | 84532;
-type SupportedTokenSymbol = 'USDC' | 'USDT';
+type SupportedChainId = 8453 | 43114 | 56 | 91342;
 
 interface RelayBody {
   from: `0x${string}`;
   to: `0x${string}`;
   amount: string;
-  tokenSymbol: SupportedTokenSymbol;
+  tokenSymbol: string;
   chainId: SupportedChainId;
   signature?: string; // EIP-712 서명 (메타트랜잭션용)
   nonce?: number; // 사용자 nonce
@@ -89,13 +89,21 @@ function checkAndIncreaseDailyLimit(from: string) {
   dailyUsage.set(key, { ...current, count: current.count + 1 });
 }
 
+function contractEnvSuffix(chainId: SupportedChainId): string {
+  switch (chainId) {
+    case 8453:
+      return 'BASE';
+    case 43114:
+      return 'AVALANCHE';
+    case 56:
+      return 'BNB';
+    case 91342:
+      return 'GIWA_SEPOLIA';
+  }
+}
+
 function getChainConfig(chainId: SupportedChainId) {
   switch (chainId) {
-    case 1:
-      return {
-        chain: mainnet,
-        rpcUrl: process.env.NEXT_PUBLIC_RPC_MAINNET || mainnet.rpcUrls.default.http[0],
-      };
     case 8453:
       return {
         chain: base,
@@ -108,10 +116,12 @@ function getChainConfig(chainId: SupportedChainId) {
       };
     case 56:
       return { chain: bsc, rpcUrl: process.env.NEXT_PUBLIC_RPC_BNB || bsc.rpcUrls.default.http[0] };
-    case 84532:
+    case 91342:
       return {
-        chain: baseSepolia,
-        rpcUrl: process.env.NEXT_PUBLIC_RPC_BASE_SEPOLIA || baseSepolia.rpcUrls.default.http[0],
+        chain: giwaSepolia,
+        rpcUrl:
+          process.env.NEXT_PUBLIC_RPC_GIWA_SEPOLIA ||
+          giwaSepolia.rpcUrls.default.http[0],
       };
     default:
       throw new Error(`지원하지 않는 체인입니다: ${chainId}`);
@@ -121,9 +131,6 @@ function getChainConfig(chainId: SupportedChainId) {
 function getSponsorPrivateKey(chainId: SupportedChainId): `0x${string}` {
   let envKey: string | undefined;
   switch (chainId) {
-    case 1:
-      envKey = process.env.ADWALLET_SPONSOR_PK_ETH;
-      break;
     case 8453:
       envKey = process.env.ADWALLET_SPONSOR_PK_BASE;
       break;
@@ -133,8 +140,8 @@ function getSponsorPrivateKey(chainId: SupportedChainId): `0x${string}` {
     case 56:
       envKey = process.env.ADWALLET_SPONSOR_PK_BNB;
       break;
-    case 84532:
-      envKey = process.env.ADWALLET_SPONSOR_PK_BASE_SEPOLIA;
+    case 91342:
+      envKey = process.env.ADWALLET_SPONSOR_PK_GIWA_SEPOLIA;
       break;
   }
   if (!envKey) {
@@ -159,11 +166,6 @@ function getSponsorPrivateKey(chainId: SupportedChainId): `0x${string}` {
 function getContractAddress(chainId: SupportedChainId): `0x${string}` {
   let envKey: string | undefined;
   switch (chainId) {
-    case 1:
-      envKey =
-        process.env.ADWALLET_CONTRACT_ADDR_ETH ||
-        process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_ETH;
-      break;
     case 8453:
       envKey =
         process.env.ADWALLET_CONTRACT_ADDR_BASE ||
@@ -179,15 +181,15 @@ function getContractAddress(chainId: SupportedChainId): `0x${string}` {
         process.env.ADWALLET_CONTRACT_ADDR_BNB ||
         process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB;
       break;
-    case 84532:
+    case 91342:
       envKey =
-        process.env.ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA ||
-        process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE_SEPOLIA;
+        process.env.ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA ||
+        process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA;
       break;
   }
   if (!envKey) {
     throw new Error(
-      `해당 체인(${chainId})의 컨트랙트 주소가 설정되어 있지 않습니다. .env.local에 NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_${chainId === 43114 ? 'AVALANCHE' : chainId === 8453 ? 'BASE' : chainId === 56 ? 'BNB' : chainId === 84532 ? 'BASE_SEPOLIA' : 'ETH'}를 설정해주세요.`
+      `해당 체인(${chainId})의 컨트랙트 주소가 설정되어 있지 않습니다. .env.local에 NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_${contractEnvSuffix(chainId)}를 설정해주세요.`
     );
   }
   return getAddress(envKey) as `0x${string}`;
@@ -246,20 +248,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ERC20만 지원 (USDC, USDT) - 네이티브 토큰 제외
-    if (tokenSymbol !== 'USDC' && tokenSymbol !== 'USDT') {
-      throw new Error('지원하지 않는 토큰입니다. USDC 또는 USDT만 가능합니다.');
-    }
-    const tokenAddresses = TOKEN_ADDRESSES[chainId];
-    if (!tokenAddresses) {
+    // 체인별 지원 토큰 해석 (ERC20, 네이티브 토큰 제외)
+    const tokenDef = findChainToken(chainId, tokenSymbol);
+    if (!tokenDef) {
       throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
     }
-    const tokenAddress = tokenSymbol === 'USDC' ? tokenAddresses.USDC : tokenAddresses.USDT;
-    if (!tokenAddress) {
-      throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
-    }
-    const tokenInfo = TOKEN_INFO[tokenSymbol];
-    const amountUnits = parseUnits(amount, tokenInfo.decimals);
+    const tokenAddress = tokenDef.address;
+    const amountUnits = parseUnits(amount, tokenDef.decimals);
 
     const walletClient = createWalletClient({
       account,

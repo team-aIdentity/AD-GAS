@@ -2,25 +2,24 @@
 
 import React from 'react';
 import { useChainId, useSwitchChain } from 'wagmi';
-import { mainnet, base, baseSepolia, avalanche, bsc } from 'wagmi/chains';
+import { base, avalanche, bsc } from 'wagmi/chains';
+import { giwaSepolia } from '@/lib/chains/giwaSepolia';
 
 export function NetworkInfo() {
   const chainId = useChainId();
   const { switchChain, isPending } = useSwitchChain();
 
   // 지갑 네트워크 선택 UI에 표시할 체인들
-  // 이더리움 메인넷 / Base 메인넷 / Base Sepolia / Avalanche / BNB
-  const supportedChains = [mainnet, base, baseSepolia, avalanche, bsc];
+  // Base 메인넷 / GIWA Sepolia / Avalanche / BNB
+  const supportedChains = [base, giwaSepolia, avalanche, bsc];
   const currentChain = supportedChains.find(chain => chain.id === chainId);
 
   const getChainIcon = (chainName: string) => {
     switch (chainName.toLowerCase()) {
-      case 'ethereum':
-        return '⟠';
       case 'base':
         return '🔵';
-      case 'base sepolia':
-        return '🧪';
+      case 'giwa sepolia':
+        return '🏛️';
       case 'avalanche c-chain':
       case 'avalanche':
         return '🗻';

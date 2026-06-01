@@ -12,16 +12,14 @@ interface TransactionCompleteModalProps {
 
 function getExplorerUrl(chainId: number, txHash: string): string {
   switch (chainId) {
-    case 1:
-      return `https://etherscan.io/tx/${txHash}`;
     case 8453:
       return `https://basescan.org/tx/${txHash}`;
     case 43114:
       return `https://snowtrace.io/tx/${txHash}`;
     case 56:
       return `https://bscscan.com/tx/${txHash}`;
-    case 84532:
-      return `https://sepolia.basescan.org/tx/${txHash}`;
+    case 91342:
+      return `https://sepolia-explorer.giwa.io/tx/${txHash}`;
     default:
       return `https://snowtrace.io/tx/${txHash}`; // 기본값: Avalanche
   }

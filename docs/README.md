@@ -12,6 +12,8 @@
 | **[통합_기획서.md](./통합_기획서.md)** | 1 | 제품 개요, 사용자 플로우(즉시 무료/포인트/스왑), 스왑풀 설계, 컨트랙트 스펙, KPI, 리스크, 로드맵 |
 | **[통합_개발_기획서.md](./통합_개발_기획서.md)** | 2 | 아키텍처, 기존/신규 컨트랙트 스펙, SDK·프론트 확장, 배포·테스트, Phase 1~3 체크리스트 |
 | **[BUSINESS_MODEL.md](./BUSINESS_MODEL.md)** | 3 | 형태1·형태2 사업 구조, 통합 수익·비용, 타깃 고객, 기술·제품 매핑, 진행 제안 |
+| **[ADS_APP_FIRST_KO.md](./ADS_APP_FIRST_KO.md)** | (선택) | 광고: Android 앱·AdMob 우선, 브라우저 GPT 선택 |
+| **[ADMOB_WHERE_KO.md](./ADMOB_WHERE_KO.md)** | (선택) | AdMob: 앱 ID·단위 ID 넣을 파일·환경 변수 표 |
 
 ### 영문 버전 (English)
 

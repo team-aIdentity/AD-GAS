@@ -4,10 +4,10 @@ async function main() {
   const signers = await ethers.getSigners();
   if (signers.length === 0) {
     throw new Error(
-      'No signers found. Please check:\n' +
-        '1. .env file exists in contracts/ folder\n' +
-        '2. PRIVATE_KEY is set in .env file\n' +
-        '3. PRIVATE_KEY format is correct (0x... or without 0x)'
+        'No signers found. Please check:\n' +
+        '1. `PRIVATE_KEY` in `contracts/.env`, `contracts/.env.local`, or `web/frontend/.env.local`\n' +
+        '2. For GIWA deploy: `ADWALLET_SPONSOR_PK_GIWA_SEPOLIA` in frontend `.env.local` is OK\n' +
+        '3. Key format: 0x... or 64-char hex'
     );
   }
   const deployer = signers[0];

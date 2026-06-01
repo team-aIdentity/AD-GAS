@@ -1,6 +1,7 @@
 import type { Address } from 'viem';
 
-export type SupportedTokenSymbol = 'USDC' | 'USDT';
+// 체인별 지원 토큰 심볼 (서버에서 체인+심볼로 토큰을 해석/검증)
+export type SupportedTokenSymbol = string;
 
 export interface SponsoredTransferRequest {
   from: Address;

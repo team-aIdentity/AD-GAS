@@ -21,6 +21,8 @@
   "sendFreeDesc": "광고 시청 후 가스비 없이 트랜잭션을 실행할 수 있습니다",
   "recipientAddress": "보낼 지갑 주소",
   "tokenToSend": "보낼 토큰",
+  "category.stablecoin": "스테이블코인",
+  "category.token": "토큰",
   "amountToSend": "보낼 수량",
   "max": "최대",
   "normalGas": "일반 가스비",

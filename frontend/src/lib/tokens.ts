@@ -1,70 +1,162 @@
-// 체인별 USDC, USDT 컨트랙트 주소 (USDT가 없는 체인은 USDT 생략)
-export const TOKEN_ADDRESSES: Record<
-  number,
-  { USDC: `0x${string}`; USDT?: `0x${string}` }
-> = {
-  // Ethereum Mainnet
-  1: {
-    USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-  },
+import type { TokenCategory } from '@/types/adgasfe';
+
+export type { TokenCategory };
+
+// 체인별 지원 토큰 정의.
+// - category: 'stablecoin' | 'token' (UI에서 그룹 구분)
+// - permit: EIP-2612 도메인(name/version). 지정 시 가스리스(Permit) 서명, 미지정 시 approve 폴백.
+//   서명 시 GaslessApp이 온체인 name()/version()을 우선 읽고, 실패하면 이 값을 폴백으로 사용.
+// - usdPrice: 스테이블코인만 1로 표기. 일반 토큰은 생략(USD 환산 표시 안 함).
+export interface TokenDef {
+  symbol: string;
+  name: string;
+  address: `0x${string}`;
+  decimals: number;
+  category: TokenCategory;
+  usdPrice?: number;
+  permit?: { name: string; version: string };
+}
+
+function parseOptionalTokenAddr(raw: string | undefined): `0x${string}` | undefined {
+  if (!raw?.trim()) return undefined;
+  const t = raw.trim();
+  const addr = (t.startsWith('0x') ? t : `0x${t}`) as `0x${string}`;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) return undefined;
+  return addr;
+}
+
+const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
   // Base Mainnet
-  8453: {
-    USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    USDT: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
-  },
-  // Base Sepolia (테스트넷) - USDT 없음, USDC만 지원
-  84532: {
-    USDC: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-  },
+  8453: [
+    {
+      symbol: 'USDC',
+      name: 'USD Coin',
+      address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      decimals: 6,
+      category: 'stablecoin',
+      usdPrice: 1,
+      permit: { name: 'USD Coin', version: '2' },
+    },
+    {
+      symbol: 'USDT',
+      name: 'Tether',
+      address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
+      decimals: 6,
+      category: 'stablecoin',
+      usdPrice: 1,
+    },
+    {
+      symbol: 'AERO',
+      name: 'Aerodrome',
+      address: '0x940181a94A35A4569E4529A3CDfB74e38FD98631',
+      decimals: 18,
+      category: 'token',
+      permit: { name: 'Aerodrome', version: '1' },
+    },
+    {
+      symbol: 'SBMB',
+      name: 'SBMB',
+      address: '0xc90990Db321F5806587bF496a3652c19aB223b94',
+      decimals: 18,
+      category: 'token',
+      permit: { name: 'SBMB', version: '1' },
+    },
+    {
+      symbol: 'LDT',
+      name: 'Lucem Diffundo Token',
+      address: '0x504B262539d3A4194d0649f69Fe3cCA06D5bB24a',
+      decimals: 18,
+      category: 'token',
+      permit: { name: 'Lucem Diffundo Token', version: '1' },
+    },
+  ],
   // Avalanche C-Chain
-  43114: {
-    USDC: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
-    USDT: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
-  },
-  // BNB Chain
-  56: {
-    USDC: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
-    USDT: '0x55d398326f99059fF775485246999027B3197955',
-  },
+  43114: [
+    {
+      symbol: 'USDC',
+      name: 'USD Coin',
+      address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+      decimals: 6,
+      category: 'stablecoin',
+      usdPrice: 1,
+      permit: { name: 'USD Coin', version: '2' },
+    },
+    {
+      symbol: 'USDT',
+      name: 'Tether',
+      address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
+      decimals: 6,
+      category: 'stablecoin',
+      usdPrice: 1,
+    },
+  ],
+  // BNB Chain (USDC/USDT는 18 decimals)
+  56: [
+    {
+      symbol: 'USDC',
+      name: 'USD Coin',
+      address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+      decimals: 18,
+      category: 'stablecoin',
+      usdPrice: 1,
+      permit: { name: 'USD Coin', version: '2' },
+    },
+    {
+      symbol: 'USDT',
+      name: 'Tether',
+      address: '0x55d398326f99059fF775485246999027B3197955',
+      decimals: 18,
+      category: 'stablecoin',
+      usdPrice: 1,
+    },
+  ],
 };
 
-// EIP-2612 Permit 지원 토큰 설정 (체인ID: { USDC?: { name, version }, USDT?: { name, version } })
-// name/version은 토큰 컨트랙트의 EIP-712 domain과 일치해야 함. Circle USDC는 name() = "USD Coin", version "2"
-// 미설정 시 approve 트랜잭션 사용 (사용자 가스비 부담)
-export const PERMIT_TOKEN_CONFIG: Record<
-  number,
-  { USDC?: { name: string; version: string }; USDT?: { name: string; version: string } }
-> = {
-  1: {
-    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Ethereum Mainnet
-  },
-  8453: {
-    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Base Mainnet
-  },
-  56: {
-    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC BNB Chain
-  },
-  43114: {
-    USDC: { name: 'USD Coin', version: '2' }, // Circle USDC Avalanche C-Chain
-  },
-  // Base Sepolia (테스트넷) — 온체인: name() = "USDC", version() = "2" (Circle 스타일)
-  // name/version은 GaslessApp에서 name()/version() 읽기 실패 시에만 폴백으로 사용
-  84532: {
-    USDC: { name: 'USDC', version: '2' },
-  },
-};
+// GIWA Sepolia: 공식 문서에 표준 스테이블 주소가 없어 USDC/USDT는 선택적 환경 변수로 설정
+const giwaSepoliaUsdc = parseOptionalTokenAddr(process.env.NEXT_PUBLIC_GIWA_SEPOLIA_USDC);
+const giwaSepoliaUsdt = parseOptionalTokenAddr(process.env.NEXT_PUBLIC_GIWA_SEPOLIA_USDT);
 
-// 토큰 정보 (decimals, USD 가격 등)
-export const TOKEN_INFO = {
-  USDC: {
-    name: 'USD Coin',
-    decimals: 6,
-    usdPrice: 1,
-  },
-  USDT: {
-    name: 'Tether',
-    decimals: 6,
-    usdPrice: 1,
-  },
-};
+function buildGiwaTokens(): TokenDef[] {
+  if (!giwaSepoliaUsdc) return [];
+  const tokens: TokenDef[] = [
+    {
+      symbol: 'USDC',
+      name: 'USD Coin',
+      address: giwaSepoliaUsdc,
+      decimals: 6,
+      category: 'stablecoin',
+      usdPrice: 1,
+      permit: { name: 'USD Coin', version: '2' },
+    },
+  ];
+  if (giwaSepoliaUsdt) {
+    tokens.push({
+      symbol: 'USDT',
+      name: 'Tether',
+      address: giwaSepoliaUsdt,
+      decimals: 6,
+      category: 'stablecoin',
+      usdPrice: 1,
+    });
+  }
+  return tokens;
+}
+
+export const CHAIN_TOKENS: Record<number, TokenDef[]> = { ...STATIC_CHAIN_TOKENS };
+
+const giwaTokens = buildGiwaTokens();
+if (giwaTokens.length > 0) {
+  CHAIN_TOKENS[91342] = giwaTokens;
+}
+
+export function getChainTokens(chainId: number | undefined): TokenDef[] {
+  if (!chainId) return [];
+  return CHAIN_TOKENS[chainId] ?? [];
+}
+
+export function findChainToken(
+  chainId: number | undefined,
+  symbol: string
+): TokenDef | undefined {
+  return getChainTokens(chainId).find((t) => t.symbol === symbol);
+}

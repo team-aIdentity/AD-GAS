@@ -21,6 +21,8 @@
   "sendFreeDesc": "Execute transactions without gas after watching an ad",
   "recipientAddress": "Recipient address",
   "tokenToSend": "Token to send",
+  "category.stablecoin": "Stablecoins",
+  "category.token": "Tokens",
   "amountToSend": "Amount to send",
   "max": "Max",
   "normalGas": "Normal gas",

@@ -1,5 +1,11 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## AD-GAS: 광고 (앱 우선)
+
+브라우저는 **GPT 리워드(Ad Manager)**, Android/iOS 네이티브 래퍼 앱에서는 **AdMob 리워드**가 사용됩니다. Ad Manager 계정 검토 중이면 **`NEXT_PUBLIC_GOOGLE_REWARDED_AD_SLOT`** 은 비워 두고, **배포 URL에 AdMob 변수**만 채워 Android를 먼저 가져가면 됩니다.
+
+상세 체크리스트: [`../docs/ADS_APP_FIRST_KO.md`](../docs/ADS_APP_FIRST_KO.md) · **AdMob 넣을 곳 표:** [`../docs/ADMOB_WHERE_KO.md`](../docs/ADMOB_WHERE_KO.md) · 네이티브 셸: [`../../mobile/README.md`](../../mobile/README.md)
+
 ## Getting Started
 
 First, run the development server:

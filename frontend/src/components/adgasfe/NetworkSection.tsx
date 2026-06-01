@@ -28,14 +28,20 @@ interface NetworkCardProps {
 }
 
 function NetworkCard({ network, isActive, onClick }: NetworkCardProps) {
+  const disabled = network.enabled === false;
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+      title={disabled ? '준비 중 (곧 지원)' : undefined}
       className={`content-stretch flex gap-3 h-24 items-start justify-center p-4 relative rounded-[18px] shrink-0 w-[170px] transition-all ${
-        isActive
-          ? 'bg-[rgba(99,102,241,0.13)] border-2 border-[rgba(99,102,241,0.38)] shadow-[0px_0px_24px_0px_rgba(99,102,241,0.5)]'
-          : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.13)] hover:border-[rgba(99,102,241,0.2)]'
+        disabled
+          ? 'bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] opacity-40 cursor-not-allowed'
+          : isActive
+            ? 'bg-[rgba(99,102,241,0.13)] border-2 border-[rgba(99,102,241,0.38)] shadow-[0px_0px_24px_0px_rgba(99,102,241,0.5)]'
+            : 'bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.13)] hover:border-[rgba(99,102,241,0.2)]'
       }`}
     >
       <div className="absolute left-2.5 top-2.5 size-[25px] flex items-center justify-center text-lg">
@@ -58,7 +64,7 @@ function NetworkCard({ network, isActive, onClick }: NetworkCardProps) {
         <p
           className={`font-medium leading-[14.4px] relative shrink-0 text-[12px] ${isActive ? 'text-[#c7d2fe]' : 'text-[#94a3b8]'}`}
         >
-          {network.type}
+          {disabled ? '준비 중' : network.type}
         </p>
       </div>
     </button>
