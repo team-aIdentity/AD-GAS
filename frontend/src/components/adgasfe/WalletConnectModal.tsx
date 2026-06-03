@@ -22,6 +22,8 @@ interface WalletConnectModalProps {
   connect: ConnectFn;
   reset: () => void;
   isPending: boolean;
+  /** Capacitor: connect() 호출 직후 isPending 전에도 로딩 UI 표시 */
+  isLinking?: boolean;
 }
 
 /**
@@ -34,6 +36,7 @@ export function WalletConnectModal({
   connect,
   reset,
   isPending,
+  isLinking = false,
 }: WalletConnectModalProps) {
   const { t } = useLocale();
   const nativeApp = typeof window !== 'undefined' && isCapacitorNativeApp();
@@ -81,7 +84,7 @@ export function WalletConnectModal({
     onClose();
   };
 
-  const nativeConnecting = nativeApp && isPending;
+  const nativeConnecting = nativeApp && (isPending || isLinking);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">

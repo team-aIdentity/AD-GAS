@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import {
   useAccount,
   useConnect,
@@ -107,6 +108,8 @@ export function GaslessApp() {
 
   const [isMobile, setIsMobile] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [isWalletLinking, setIsWalletLinking] = useState(false);
+  const walletLinkingRef = useRef(false);
 
   const [, setSelectedNetwork] = useState<Network>(DEFAULT_NETWORK);
   const [activeTab, setActiveTab] = useState<'send' | 'transaction'>('send');
@@ -230,42 +233,79 @@ export function GaslessApp() {
 
   const contractAddress = getContractAddress();
 
-  // Capacitor: MetaMask 딥링크 복귀 후 세션 재연결
+  // Capacitor: MetaMask 복귀 시에만 재연결 (마운트마다 reconnect 하지 않음)
   useEffect(() => {
     if (!isCapacitorNativeApp()) return;
-    reconnect();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        reconnect();
+
+    let resumeTimer: ReturnType<typeof setTimeout> | undefined;
+    const onResume = () => {
+      if (accountStatus === 'connected') {
+        walletLinkingRef.current = false;
+        setIsWalletLinking(false);
+        setShowConnectModal(false);
+        return;
       }
+      if (!walletLinkingRef.current && !isConnectPending) return;
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => reconnect(), 200);
     };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') onResume();
+    };
+
     document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [reconnect]);
+
+    let removeAppListener: (() => void) | undefined;
+    void import('@capacitor/app')
+      .then(({ App }) =>
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) onResume();
+        })
+      )
+      .then(handle => {
+        removeAppListener = () => void handle.remove();
+      })
+      .catch(() => {});
+
+    return () => {
+      clearTimeout(resumeTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+      removeAppListener?.();
+    };
+  }, [reconnect, isConnectPending, accountStatus]);
 
   const handleConnect = useCallback(() => {
     resetConnect();
-    setShowConnectModal(true);
+    walletLinkingRef.current = true;
+    setIsWalletLinking(true);
+    flushSync(() => setShowConnectModal(true));
 
     const preferred = getCapacitorPreferredConnector(connectors);
     if (!preferred) return;
 
-    connect(
-      { connector: preferred },
-      {
-        onSuccess: () => {
-          setShowConnectModal(false);
-        },
-        onError: err => {
-          resetConnect();
-          const msg =
-            (err as { shortMessage?: string })?.shortMessage ??
-            (err as Error)?.message ??
-            t('errors.generic');
-          toast.error(msg);
-        },
-      }
-    );
+    requestAnimationFrame(() => {
+      connect(
+        { connector: preferred },
+        {
+          onSuccess: () => {
+            walletLinkingRef.current = false;
+            setIsWalletLinking(false);
+            setShowConnectModal(false);
+          },
+          onError: err => {
+            walletLinkingRef.current = false;
+            setIsWalletLinking(false);
+            resetConnect();
+            const msg =
+              (err as { shortMessage?: string })?.shortMessage ??
+              (err as Error)?.message ??
+              t('errors.generic');
+            toast.error(msg);
+          },
+        }
+      );
+    });
   }, [connect, connectors, resetConnect, t]);
 
   const handleDisconnect = useCallback(() => {
@@ -713,11 +753,16 @@ export function GaslessApp() {
         )}
         <WalletConnectModal
           open={showConnectModal}
-          onClose={() => setShowConnectModal(false)}
+          onClose={() => {
+            setIsWalletLinking(false);
+            walletLinkingRef.current = false;
+            setShowConnectModal(false);
+          }}
           connectors={connectors}
           connect={connect}
           reset={resetConnect}
           isPending={isConnectPending}
+          isLinking={isWalletLinking}
         />
         <Toaster />
       </div>
@@ -928,11 +973,16 @@ export function GaslessApp() {
       </footer>
       <WalletConnectModal
         open={showConnectModal}
-        onClose={() => setShowConnectModal(false)}
+        onClose={() => {
+          setIsWalletLinking(false);
+          walletLinkingRef.current = false;
+          setShowConnectModal(false);
+        }}
         connectors={connectors}
         connect={connect}
         reset={resetConnect}
         isPending={isConnectPending}
+        isLinking={isWalletLinking}
       />
       <AdModal
         isOpen={showAdModal}
