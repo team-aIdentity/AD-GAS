@@ -6,6 +6,7 @@ import {
   useAccount,
   useConnect,
   useDisconnect,
+  useChainId,
   useWalletClient,
   useSwitchChain,
   useReadContracts,
@@ -17,7 +18,7 @@ import { Toaster } from 'sonner';
 import { toast } from 'sonner';
 import { AdWalletRelayerSDK } from '../../../../src';
 import { SUPPORTED_NETWORKS, DEFAULT_NETWORK } from '@/lib/networks';
-import { getChainTokens, findChainToken } from '@/lib/tokens';
+import { getChainTokens, findChainToken, tokenDefToUiToken, getDefaultUiToken } from '@/lib/tokens';
 import { erc20Abi } from 'viem';
 import type { Network, Token } from '@/types/adgasfe';
 import { Header } from './Header';
@@ -119,7 +120,9 @@ export function GaslessApp() {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completedTxHash, setCompletedTxHash] = useState<string | null>(null);
-  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(() =>
+    getDefaultUiToken(DEFAULT_NETWORK.chainId)
+  );
   const [pendingTransaction, setPendingTransaction] = useState<{
     to: string;
     amount: string;
@@ -171,46 +174,43 @@ export function GaslessApp() {
       .catch(() => {});
   }, []);
 
-  const chainId = walletClient?.chain?.id;
+  const connectedChainId = useChainId();
+  const chainId = connectedChainId || undefined;
   const currentNetwork =
     SUPPORTED_NETWORKS.find(n => n.chainId === chainId) ?? DEFAULT_NETWORK;
+  // UI·잔액 조회용 체인: 연결 직후 chainId 미수신 시에도 Base(기본) 토큰 목록 표시
+  const tokenChainId = chainId ?? currentNetwork.chainId;
 
-  // 체인별 지원 토큰 잔액 조회 (ERC20 멀티콜, 네이티브 토큰 제외)
-  const chainTokens = getChainTokens(chainId);
+  const chainTokens = getChainTokens(tokenChainId);
   const { data: balanceResults, isLoading: eoaBalanceLoading } = useReadContracts({
     contracts: chainTokens.map((tk) => ({
       address: tk.address,
       abi: erc20Abi,
       functionName: 'balanceOf' as const,
       args: address ? [address] : undefined,
-      chainId,
+      chainId: tokenChainId,
     })),
-    query: { enabled: !!address && !!chainId && chainTokens.length > 0 },
+    query: { enabled: !!address && chainTokens.length > 0 },
   });
 
   const availableTokens: Token[] = chainTokens.map((tk, i) => {
     const raw = balanceResults?.[i]?.result as bigint | undefined;
-    return {
-      symbol: tk.symbol,
-      name: tk.name,
-      balance: raw !== undefined ? Number(formatUnits(raw, tk.decimals)) : 0,
-      decimals: tk.decimals,
-      usdPrice: tk.usdPrice,
-      category: tk.category,
-    };
+    return tokenDefToUiToken(
+      tk,
+      raw !== undefined ? Number(formatUnits(raw, tk.decimals)) : 0
+    );
   });
 
-  // selectedToken이 없거나 availableTokens에 없으면 첫 번째 토큰으로 설정
+  // 선택 토큰: 목록과 동기화 (연결 직후 null 방지 — 기본 첫 토큰 유지)
   useEffect(() => {
-    if (availableTokens.length > 0) {
-      const currentToken = selectedToken;
-      if (!currentToken || !availableTokens.find(t => t.symbol === currentToken.symbol)) {
-        setSelectedToken(availableTokens[0]);
-      }
-    } else {
-      setSelectedToken(null);
-    }
-  }, [availableTokens, chainId]);
+    if (availableTokens.length === 0) return;
+    setSelectedToken(prev => {
+      const matched = prev
+        ? availableTokens.find(t => t.symbol === prev.symbol)
+        : undefined;
+      return matched ?? availableTokens[0];
+    });
+  }, [availableTokens, tokenChainId]);
 
   const walletShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '';
 

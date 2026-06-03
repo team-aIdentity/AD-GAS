@@ -104,7 +104,7 @@ export function BalanceSection({
                       : '0'}
                 </p>
                 <p className="font-semibold leading-[15.6px] relative shrink-0 text-[#94a3b8] text-[13px]">
-                  {isConnected && token ? token.symbol : 'null'}
+                  {isConnected && token ? token.symbol : token?.symbol ?? '—'}
                 </p>
               </div>
             </div>

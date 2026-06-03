@@ -120,7 +120,11 @@ export function TransferSection({
                 >
                   <div className="flex items-center justify-between px-5 h-full">
                     <p className="font-medium leading-[18px] text-[#e2e8f0] text-[15px]">
-                      {selectedToken ? `${selectedToken.symbol} (${selectedToken.name})` : 'null'}
+                      {selectedToken
+                        ? `${selectedToken.symbol} (${selectedToken.name})`
+                        : availableTokens[0]
+                          ? `${availableTokens[0].symbol} (${availableTokens[0].name})`
+                          : '—'}
                     </p>
                     <ChevronDown className="size-5 text-[#94a3b8]" />
                   </div>

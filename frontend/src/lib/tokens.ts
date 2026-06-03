@@ -1,4 +1,4 @@
-import type { TokenCategory } from '@/types/adgasfe';
+import type { TokenCategory, Token } from '@/types/adgasfe';
 
 export type { TokenCategory };
 
@@ -152,6 +152,23 @@ if (giwaTokens.length > 0) {
 export function getChainTokens(chainId: number | undefined): TokenDef[] {
   if (!chainId) return [];
   return CHAIN_TOKENS[chainId] ?? [];
+}
+
+/** TokenDef → UI Token (잔액은 기본 0, 멀티콜 결과로 갱신) */
+export function tokenDefToUiToken(def: TokenDef, balance = 0): Token {
+  return {
+    symbol: def.symbol,
+    name: def.name,
+    balance,
+    decimals: def.decimals,
+    usdPrice: def.usdPrice,
+    category: def.category,
+  };
+}
+
+export function getDefaultUiToken(chainId: number): Token | null {
+  const def = getChainTokens(chainId)[0];
+  return def ? tokenDefToUiToken(def) : null;
 }
 
 export function findChainToken(

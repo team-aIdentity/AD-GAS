@@ -98,7 +98,7 @@ export function MobileTransferForm({
                 className="bg-[rgba(255,255,255,0.03)] h-[48px] relative rounded-xl w-full border border-[rgba(255,255,255,0.08)] disabled:opacity-50 flex items-center justify-between px-4"
               >
                 <p className="font-medium text-[#e2e8f0] text-[14px]">
-                  {selectedToken ? selectedToken.symbol : 'null'}
+                  {selectedToken?.symbol ?? availableTokens[0]?.symbol ?? '—'}
                 </p>
                 <ChevronDown className="size-4 text-[#94a3b8]" />
               </button>
