@@ -5,6 +5,7 @@ import {
   useAccount,
   useConnect,
   useDisconnect,
+  useReconnect,
   useWalletClient,
   useSwitchChain,
   useReadContracts,
@@ -34,6 +35,8 @@ import { MobileGasSavings } from './mobile/MobileGasSavings';
 import { MobileTransferForm } from './mobile/MobileTransferForm';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useGoogleRewardedAd } from '@/hooks/useGoogleRewardedAd';
+import { isCapacitorNativeApp } from '@/utils/capacitorNative';
+import { getCapacitorPreferredConnector } from '@/lib/walletConnectEnvironment';
 
 const DAILY_LIMIT = 10;
 
@@ -92,6 +95,7 @@ export function GaslessApp() {
   const isConnected = accountStatus === 'connected' && !!address;
   const { connectors, connect, reset: resetConnect, isPending: isConnectPending } = useConnect();
   const { disconnect } = useDisconnect();
+  const { reconnect } = useReconnect();
 
   const mapErrorToMessage = (error: Error) => {
     const key = getErrorKey(error);
@@ -226,10 +230,43 @@ export function GaslessApp() {
 
   const contractAddress = getContractAddress();
 
+  // Capacitor: MetaMask 딥링크 복귀 후 세션 재연결
+  useEffect(() => {
+    if (!isCapacitorNativeApp()) return;
+    reconnect();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        reconnect();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [reconnect]);
+
   const handleConnect = useCallback(() => {
     resetConnect();
     setShowConnectModal(true);
-  }, [resetConnect]);
+
+    const preferred = getCapacitorPreferredConnector(connectors);
+    if (!preferred) return;
+
+    connect(
+      { connector: preferred },
+      {
+        onSuccess: () => {
+          setShowConnectModal(false);
+        },
+        onError: err => {
+          resetConnect();
+          const msg =
+            (err as { shortMessage?: string })?.shortMessage ??
+            (err as Error)?.message ??
+            t('errors.generic');
+          toast.error(msg);
+        },
+      }
+    );
+  }, [connect, connectors, resetConnect, t]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
