@@ -12,6 +12,8 @@ import {
   isWalletConnectProjectConfigured,
   orderConnectorsForEnvironment,
 } from '@/lib/walletConnectEnvironment';
+import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
+import { DEFAULT_NETWORK } from '@/lib/networks';
 
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
 
@@ -59,13 +61,16 @@ export function WalletConnectModal({
   };
 
   const startConnect = (connector: Connector) => {
+    if (nativeApp) setWalletLinkingFlag(true);
     connect(
-      { connector },
+      { connector, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
       {
         onSuccess: () => {
+          setWalletLinkingFlag(false);
           onClose();
         },
         onError: err => {
+          setWalletLinkingFlag(false);
           reset();
           const msg =
             (err as { shortMessage?: string })?.shortMessage ??

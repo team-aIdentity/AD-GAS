@@ -81,6 +81,7 @@
   "errors.gasLimit": "Daily limit reached. Please try again tomorrow.",
   "errors.paymasterFunds": "Insufficient balance. Please check your assets.",
   "errors.network": "Network is delayed. Please try again later.",
+  "errors.walletNotReadyAfterAd": "Could not restore wallet after the ad. Open MetaMask and try again.",
   "errors.generic": "Transaction failed. Please try again.",
   "errors.unknown": "An unknown error occurred.",
   "toast.walletDisconnected": "Wallet disconnected",

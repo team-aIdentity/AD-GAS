@@ -81,6 +81,7 @@
   "errors.gasLimit": "오늘 한도가 소진되었습니다. 내일 다시 시도해 주세요.",
   "errors.paymasterFunds": "잔액이 부족합니다. 보유 자산을 확인해 주세요.",
   "errors.network": "네트워크가 지연되고 있습니다. 잠시 후 다시 시도해 주세요.",
+  "errors.walletNotReadyAfterAd": "광고 시청 후 지갑 연결을 복구하지 못했습니다. MetaMask 앱을 열어 연결 상태를 확인한 뒤 다시 시도해 주세요.",
   "errors.generic": "트랜잭션에 실패했습니다. 다시 시도해 주세요.",
   "errors.unknown": "알 수 없는 오류가 발생했습니다.",
   "toast.walletDisconnected": "지갑 연결이 해제되었습니다",

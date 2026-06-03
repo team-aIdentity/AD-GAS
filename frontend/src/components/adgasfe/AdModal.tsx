@@ -5,6 +5,8 @@ import { X, Play, Volume2, Loader2, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
 import type { RewardedAdShowOptions } from '@/hooks/useGoogleRewardedAd';
+import { isCapacitorNativeApp } from '@/utils/capacitorNative';
+import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
 
 interface PendingTransaction {
   to: string;
@@ -61,6 +63,7 @@ export function AdModal({
     if (isRewardedAdConfigured && showRealRewardedAd) {
       setIsLoadingRealAd(true);
       setAdSurfaceActive(false);
+      if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
       try {
         await showRealRewardedAd({
           onAdSurfaceReady: () => {

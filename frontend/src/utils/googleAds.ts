@@ -98,6 +98,7 @@ export function showGoogleRewardedAd(
           return;
         }
 
+        let granted = false;
         let settled = false;
         const cleanup = () => {
           try {
@@ -108,17 +109,15 @@ export function showGoogleRewardedAd(
         };
 
         const onGranted = () => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          resolve();
+          granted = true;
         };
 
         const onClosed = () => {
           if (settled) return;
           settled = true;
           cleanup();
-          reject(new Error('Ad was not completed. Transaction cancelled.'));
+          if (granted) resolve();
+          else reject(new Error('Ad was not completed. Transaction cancelled.'));
         };
 
         pubads.addEventListener?.('rewardedSlotGranted', onGranted);
