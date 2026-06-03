@@ -5,6 +5,7 @@ import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from '../wagmi.config';
 import { LocaleProvider } from '@/contexts/LocaleContext';
+import { CapacitorWalletBootstrap } from '@/components/CapacitorWalletBootstrap';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,8 +23,11 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <LocaleProvider>
-      <WagmiProvider config={config} reconnectOnMount={false}>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <WagmiProvider config={config} reconnectOnMount>
+        <QueryClientProvider client={queryClient}>
+          <CapacitorWalletBootstrap />
+          {children}
+        </QueryClientProvider>
       </WagmiProvider>
     </LocaleProvider>
   );

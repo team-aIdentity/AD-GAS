@@ -12,6 +12,19 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { findChainToken } from '@/lib/tokens';
 import { giwaSepolia } from '@/lib/chains/giwaSepolia';
 
+export async function OPTIONS() {
+  return NextResponse.json(
+    {},
+    {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    }
+  );
+}
+
 // 컨트랙트 ABI
 const SPONSORED_TRANSFER_ABI = [
   {

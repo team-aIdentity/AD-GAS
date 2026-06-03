@@ -6,7 +6,6 @@ import {
   useAccount,
   useConnect,
   useDisconnect,
-  useReconnect,
   useWalletClient,
   useSwitchChain,
   useReadContracts,
@@ -38,6 +37,8 @@ import { useLocale } from '@/contexts/LocaleContext';
 import { useGoogleRewardedAd } from '@/hooks/useGoogleRewardedAd';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import { getCapacitorPreferredConnector } from '@/lib/walletConnectEnvironment';
+import { getRelayerApiBase } from '@/lib/relayerApiBase';
+import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
 
 const DAILY_LIMIT = 10;
 
@@ -96,7 +97,6 @@ export function GaslessApp() {
   const isConnected = accountStatus === 'connected' && !!address;
   const { connectors, connect, reset: resetConnect, isPending: isConnectPending } = useConnect();
   const { disconnect } = useDisconnect();
-  const { reconnect } = useReconnect();
 
   const mapErrorToMessage = (error: Error) => {
     const key = getErrorKey(error);
@@ -233,52 +233,20 @@ export function GaslessApp() {
 
   const contractAddress = getContractAddress();
 
-  // Capacitor: MetaMask 복귀 시에만 재연결 (마운트마다 reconnect 하지 않음)
   useEffect(() => {
-    if (!isCapacitorNativeApp()) return;
-
-    let resumeTimer: ReturnType<typeof setTimeout> | undefined;
-    const onResume = () => {
-      if (accountStatus === 'connected') {
-        walletLinkingRef.current = false;
-        setIsWalletLinking(false);
-        setShowConnectModal(false);
-        return;
-      }
-      if (!walletLinkingRef.current && !isConnectPending) return;
-      clearTimeout(resumeTimer);
-      resumeTimer = setTimeout(() => reconnect(), 200);
-    };
-
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') onResume();
-    };
-
-    document.addEventListener('visibilitychange', onVisible);
-
-    let removeAppListener: (() => void) | undefined;
-    void import('@capacitor/app')
-      .then(({ App }) =>
-        App.addListener('appStateChange', ({ isActive }) => {
-          if (isActive) onResume();
-        })
-      )
-      .then(handle => {
-        removeAppListener = () => void handle.remove();
-      })
-      .catch(() => {});
-
-    return () => {
-      clearTimeout(resumeTimer);
-      document.removeEventListener('visibilitychange', onVisible);
-      removeAppListener?.();
-    };
-  }, [reconnect, isConnectPending, accountStatus]);
+    if (isConnected && isWalletLinking) {
+      walletLinkingRef.current = false;
+      setIsWalletLinking(false);
+      setWalletLinkingFlag(false);
+      setShowConnectModal(false);
+    }
+  }, [isConnected, isWalletLinking]);
 
   const handleConnect = useCallback(() => {
     resetConnect();
     walletLinkingRef.current = true;
     setIsWalletLinking(true);
+    if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
     flushSync(() => setShowConnectModal(true));
 
     const preferred = getCapacitorPreferredConnector(connectors);
@@ -291,11 +259,13 @@ export function GaslessApp() {
           onSuccess: () => {
             walletLinkingRef.current = false;
             setIsWalletLinking(false);
+            setWalletLinkingFlag(false);
             setShowConnectModal(false);
           },
           onError: err => {
             walletLinkingRef.current = false;
             setIsWalletLinking(false);
+            setWalletLinkingFlag(false);
             resetConnect();
             const msg =
               (err as { shortMessage?: string })?.shortMessage ??
@@ -576,7 +546,7 @@ export function GaslessApp() {
       console.log('[handleAdComplete] Signature received:', signature);
 
       // Relayer SDK를 통해 스폰서(AD WALLET) 대납 전송 요청
-      const sdk = new AdWalletRelayerSDK();
+      const sdk = new AdWalletRelayerSDK({ baseUrl: getRelayerApiBase() });
       console.log('[handleAdComplete] Calling sendSponsoredTransfer...');
       const { txHash } = await sdk.sendSponsoredTransfer({
         from: address as `0x${string}`,
@@ -756,6 +726,7 @@ export function GaslessApp() {
           onClose={() => {
             setIsWalletLinking(false);
             walletLinkingRef.current = false;
+            setWalletLinkingFlag(false);
             setShowConnectModal(false);
           }}
           connectors={connectors}
@@ -976,6 +947,7 @@ export function GaslessApp() {
         onClose={() => {
           setIsWalletLinking(false);
           walletLinkingRef.current = false;
+          setWalletLinkingFlag(false);
           setShowConnectModal(false);
         }}
         connectors={connectors}
