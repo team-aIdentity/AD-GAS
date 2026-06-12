@@ -17,6 +17,7 @@ interface MobileTransferFormProps {
   availableTokens: Token[];
   onSendClick: () => void;
   isServiceSuspended?: boolean;
+  isPreparing?: boolean;
 }
 
 export function MobileTransferForm({
@@ -31,6 +32,7 @@ export function MobileTransferForm({
   availableTokens,
   onSendClick,
   isServiceSuspended = false,
+  isPreparing = false,
 }: MobileTransferFormProps) {
   const { t } = useLocale();
   const [showTokenSelect, setShowTokenSelect] = useState(false);
@@ -167,12 +169,16 @@ export function MobileTransferForm({
         <button
           type="button"
           onClick={onSendClick}
-          disabled={!isConnected || isServiceSuspended}
+          disabled={!isConnected || isServiceSuspended || isPreparing}
           className="w-full h-14 rounded-2xl bg-gradient-to-b from-[#dc2626] to-[#b91c1c] border border-[rgba(239,68,68,0.25)] shadow-[0px_0px_24px_0px_rgba(239,68,68,0.38)] hover:from-[#ef4444] hover:to-[#dc2626] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
         >
           <span className="text-[20px]">📺</span>
           <span className="font-extrabold text-white text-[15px]">
-            {isServiceSuspended ? t('serviceSuspended') : t('sendWithAd')}
+            {isPreparing
+              ? t('sendPreparing')
+              : isServiceSuspended
+                ? t('serviceSuspended')
+                : t('sendWithAd')}
           </span>
         </button>
       </div>

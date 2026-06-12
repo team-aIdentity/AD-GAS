@@ -7,7 +7,6 @@ import {
   useConnect,
   useDisconnect,
   useChainId,
-  useSwitchChain,
   useReadContracts,
 } from 'wagmi';
 import { formatUnits, parseUnits, encodePacked, keccak256, getAddress, maxUint256 } from 'viem';
@@ -109,8 +108,6 @@ export function GaslessApp() {
     const key = getErrorKey(error);
     return key ? t(key) : error.message || t('errors.generic');
   };
-  const { switchChainAsync } = useSwitchChain();
-
   const [isMobile, setIsMobile] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [isWalletLinking, setIsWalletLinking] = useState(false);
@@ -136,6 +133,7 @@ export function GaslessApp() {
   } | null>(null);
   const [isTransacting, setIsTransacting] = useState(false); // used in handleAdComplete
   const [isPreparingSend, setIsPreparingSend] = useState(false);
+  const [txStatusMessage, setTxStatusMessage] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | null>(null);
   const [freeTransactionsUsed, setFreeTransactionsUsed] = useState(0);
   const [transactions, setTransactions] = useState<
@@ -182,6 +180,7 @@ export function GaslessApp() {
 
   const connectedChainId = useChainId();
   const chainId = connectedChainId || undefined;
+  const connectedNetwork = chainId ? SUPPORTED_NETWORKS.find(n => n.chainId === chainId) : undefined;
 
   // 지갑 연결·체인 변경 시 UI 선택과 동기화
   useEffect(() => {
@@ -200,8 +199,8 @@ export function GaslessApp() {
     }
   }, [isConnected, chainId]);
 
-  // 연결됨 → 지갑 chainId 기준 잔액, 미연결 → UI 선택 네트워크 기준 토큰 목록
-  const tokenChainId = (isConnected && chainId ? chainId : selectedNetwork.chainId) as
+  // 지원하지 않는 지갑 체인(Base Sepolia 등)에 있을 때는 UI 선택 네트워크 기준으로 유지
+  const tokenChainId = (isConnected && connectedNetwork ? connectedNetwork.chainId : selectedNetwork.chainId) as
     | 8453
     | 91342
     | 43114
@@ -389,9 +388,9 @@ export function GaslessApp() {
       if (!isConnected) return;
 
       try {
-        await switchChainAsync({
-          chainId: network.chainId as 8453 | 91342 | 43114 | 56,
-        });
+        if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
+        toast.info(`${network.name} 네트워크로 전환해 주세요.`);
+        await ensureWalletOnChain(network.chainId as SupportedChainId);
         toast.success(t('toast.networkSwitched', { name: network.name }));
       } catch {
         const actual =
@@ -400,22 +399,27 @@ export function GaslessApp() {
             : DEFAULT_NETWORK;
         setSelectedNetwork(actual);
         toast.error(t('toast.networkSwitchFailed'));
+      } finally {
+        if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
       }
     },
-    [switchChainAsync, t, isConnected, chainId, selectedNetwork.chainId]
+    [t, isConnected, chainId, selectedNetwork.chainId]
   );
 
   const handleAdComplete = useCallback(async () => {
     setShowAdModal(false);
+    setTxStatusMessage(t('txModal.checkingNetwork'));
     setShowTransactionModal(true);
 
     if (!address || !pendingTransaction || !selectedToken) {
       setShowTransactionModal(false);
+      setTxStatusMessage(undefined);
       toast.error(t('toast.connectFirst'));
       return;
     }
     if (!chainId) {
       setShowTransactionModal(false);
+      setTxStatusMessage(undefined);
       toast.error(t('toast.networkSwitchFailed'));
       return;
     }
@@ -427,8 +431,10 @@ export function GaslessApp() {
     if (isCapacitorNativeApp()) beginWalletTxSigning();
 
     try {
+      setTxStatusMessage(t('txModal.checkingNetwork'));
       await ensureWalletOnChain(targetChainId);
 
+      setTxStatusMessage(t('txModal.preparingWallet'));
       const clients = await ensureWagmiClients({
         chainId: targetChainId,
         expectedAddress: address,
@@ -438,6 +444,7 @@ export function GaslessApp() {
       }
       const { publicClient: activePublicClient } = clients;
       const signingConnector = getCapacitorPreferredConnector(wagmiConfig.connectors);
+      setTxStatusMessage(t('txModal.preparingTransfer'));
 
       // 컨트랙트 주소 조회 (체인별 환경 변수)
       let contractAddress: `0x${string}` | undefined;
@@ -460,6 +467,7 @@ export function GaslessApp() {
       if (!contractAddress) {
         setIsTransacting(false);
         setShowTransactionModal(false);
+        setTxStatusMessage(undefined);
         toast.error(
           `이 네트워크에서는 서비스를 사용할 수 없습니다. (체인 ${targetChainId} 컨트랙트 미설정)`
         );
@@ -530,7 +538,8 @@ export function GaslessApp() {
 
       if (currentAllowance < amountUnits) {
         if (supportsPermit) {
-          toast.info('Permit 서명 중... (가스비 없음)');
+          setTxStatusMessage(t('txModal.permitSign'));
+          toast.info(t('txModal.permitSign'));
           const permitDeadline = Math.floor(Date.now() / 1000) + 60 * 20;
           const tokenNonce = await activePublicClient.readContract({
             address: tokenAddress,
@@ -609,9 +618,11 @@ export function GaslessApp() {
             },
           });
           deadline = permitDeadline;
-          toast.info('전송 서명 중...');
+          setTxStatusMessage(t('txModal.transferSign'));
+          toast.info(t('txModal.transferSign'));
         } else {
           toast.info(t('toast.tokenApprovalRequest'));
+          setTxStatusMessage(t('toast.tokenApprovalRequest'));
           if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
           const approveHash = await writeContract(wagmiConfig, {
             account: address,
@@ -661,6 +672,7 @@ export function GaslessApp() {
         nonce: nonce.toString(),
       });
 
+      setTxStatusMessage(t('txModal.transferSign'));
       const signature = await signTypedDataForTx(
         {
           account: address,
@@ -676,6 +688,7 @@ export function GaslessApp() {
       console.log('[handleAdComplete] Signature received:', signature);
 
       // Relayer SDK를 통해 스폰서(AD WALLET) 대납 전송 요청
+      setTxStatusMessage(t('txModal.relayerSending'));
       const sdk = new AdWalletRelayerSDK({ baseUrl: getRelayerApiBase() });
       console.log('[handleAdComplete] Calling sendSponsoredTransfer...');
       const { txHash } = await sdk.sendSponsoredTransfer({
@@ -709,6 +722,7 @@ export function GaslessApp() {
 
       // 완료 모달 표시
       setShowTransactionModal(false);
+      setTxStatusMessage(undefined);
       setCompletedTxHash(txHash);
       setShowCompleteModal(true);
 
@@ -745,6 +759,7 @@ export function GaslessApp() {
       setUserError(friendlyMsg);
       toast.error(friendlyMsg);
       setShowTransactionModal(false);
+      setTxStatusMessage(undefined);
       setPendingTransaction(null);
     } finally {
       setIsTransacting(false);
@@ -810,6 +825,7 @@ export function GaslessApp() {
       toast.error(msg);
       return;
     } finally {
+      if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
       setIsPreparingSend(false);
     }
 
@@ -847,6 +863,12 @@ export function GaslessApp() {
         >
           {t('connectWallet')}
         </button>
+        <a
+          href="/privacy"
+          className="inline-flex text-xs font-semibold text-[#93c5fd] hover:underline"
+        >
+          {t('footer.privacy')}
+        </a>
       </div>
     );
 
@@ -923,8 +945,14 @@ export function GaslessApp() {
             onAmountChange={setAmount}
             availableTokens={availableTokens}
             onSendClick={handleSendClick}
+            isPreparing={isPreparingSend}
           />
         </main>
+        <footer className="px-5 pb-8 text-center">
+          <a href="/privacy" className="text-xs font-semibold text-[#93c5fd] hover:underline">
+            {t('footer.privacy')}
+          </a>
+        </footer>
         <AdModal
           isOpen={showAdModal}
           onComplete={handleAdComplete}
@@ -933,7 +961,11 @@ export function GaslessApp() {
           showRealRewardedAd={rewardedAd.showRewardedAd}
           isRewardedAdConfigured={rewardedAd.isConfigured}
         />
-        <TransactionModal isOpen={showTransactionModal} transaction={pendingTransaction} />
+        <TransactionModal
+          isOpen={showTransactionModal}
+          transaction={pendingTransaction}
+          statusMessage={txStatusMessage}
+        />
         <TransactionCompleteModal
           isOpen={showCompleteModal}
           txHash={completedTxHash || ''}
@@ -1017,6 +1049,7 @@ export function GaslessApp() {
                 availableTokens={availableTokens}
                 selectedNetwork={selectedNetwork}
                 onSendClick={handleSendClick}
+                isPreparing={isPreparingSend}
                 onCancelClick={() => {
                   setRecipientAddress('');
                   setAmount('0.0001');
@@ -1090,12 +1123,16 @@ export function GaslessApp() {
         </div>
       </main>
       <footer className="py-8 text-center">
-        <div className="flex items-center justify-center gap-8 text-[#64748b] text-sm">
+        <div className="flex flex-wrap items-center justify-center gap-4 text-[#64748b] text-sm sm:gap-8">
           <span>{t('footer.poweredBy')}</span>
           <span>•</span>
           <span>{t('footer.web3')}</span>
           <span>•</span>
           <span>{t('footer.secure')}</span>
+          <span>•</span>
+          <a href="/privacy" className="font-semibold text-[#93c5fd] hover:underline">
+            {t('footer.privacy')}
+          </a>
         </div>
       </footer>
       <WalletConnectModal
@@ -1120,7 +1157,11 @@ export function GaslessApp() {
         showRealRewardedAd={rewardedAd.showRewardedAd}
         isRewardedAdConfigured={rewardedAd.isConfigured}
       />
-      <TransactionModal isOpen={showTransactionModal} transaction={pendingTransaction} />
+      <TransactionModal
+        isOpen={showTransactionModal}
+        transaction={pendingTransaction}
+        statusMessage={txStatusMessage}
+      />
       <TransactionCompleteModal
         isOpen={showCompleteModal}
         txHash={completedTxHash || ''}

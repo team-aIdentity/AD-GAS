@@ -12,9 +12,10 @@ interface PendingTransaction {
 interface TransactionModalProps {
   isOpen: boolean;
   transaction: PendingTransaction | null;
+  statusMessage?: string;
 }
 
-export function TransactionModal({ isOpen, transaction }: TransactionModalProps) {
+export function TransactionModal({ isOpen, transaction, statusMessage }: TransactionModalProps) {
   const { t } = useLocale();
   if (!isOpen) return null;
 
@@ -37,7 +38,7 @@ export function TransactionModal({ isOpen, transaction }: TransactionModalProps)
 
           <div className="text-center space-y-2">
             <p className="text-xl font-bold text-white">{t('txModal.recording')}</p>
-            <p className="text-sm text-[#94a3b8]">{t('txModal.pleaseWait')}</p>
+            <p className="text-sm text-[#94a3b8]">{statusMessage ?? t('txModal.pleaseWait')}</p>
           </div>
 
           {transaction && (

@@ -19,6 +19,7 @@ interface TransferSectionProps {
   onSendClick: () => void;
   onCancelClick: () => void;
   isServiceSuspended?: boolean;
+  isPreparing?: boolean;
 }
 
 function TvIcon() {
@@ -64,6 +65,7 @@ export function TransferSection({
   onSendClick,
   onCancelClick,
   isServiceSuspended = false,
+  isPreparing = false,
 }: TransferSectionProps) {
   const { t } = useLocale();
   const [showTokenSelect, setShowTokenSelect] = useState(false);
@@ -223,13 +225,17 @@ export function TransferSection({
             <button
               type="button"
               onClick={onSendClick}
-              disabled={!isConnected || isServiceSuspended}
+              disabled={!isConnected || isServiceSuspended || isPreparing}
               className="flex-1 h-14 rounded-2xl bg-gradient-to-b from-[#dc2626] to-[#b91c1c] border border-[rgba(239,68,68,0.25)] shadow-[0px_0px_24px_0px_rgba(239,68,68,0.38)] hover:from-[#ef4444] hover:to-[#dc2626] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="flex items-center justify-center gap-3 px-7 h-full">
                 <TvIcon />
                 <p className="font-extrabold leading-[18px] text-[15px] text-white">
-                  {isServiceSuspended ? t('serviceSuspended') : t('sendWithAd')}
+                  {isPreparing
+                    ? t('sendPreparing')
+                    : isServiceSuspended
+                      ? t('serviceSuspended')
+                      : t('sendWithAd')}
                 </p>
               </div>
             </button>

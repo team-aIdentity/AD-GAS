@@ -1,7 +1,9 @@
 import { getAccount, switchChain } from '@wagmi/core';
+import { avalanche, base, bsc } from 'wagmi/chains';
 import { config } from '@/wagmi.config';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
+import { giwaSepolia } from '@/lib/chains/giwaSepolia';
 
 export type SupportedChainId = 8453 | 91342 | 43114 | 56;
 
@@ -9,21 +11,74 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+type Eip1193Provider = {
+  request?: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
+  removeListener?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
+};
+
+const CHAIN_PARAMS: Record<
+  SupportedChainId,
+  {
+    chainId: `0x${string}`;
+    chainName: string;
+    nativeCurrency: { name: string; symbol: string; decimals: 18 };
+    rpcUrls: string[];
+    blockExplorerUrls: string[];
+  }
+> = {
+  [base.id]: {
+    chainId: '0x2105',
+    chainName: base.name,
+    nativeCurrency: base.nativeCurrency,
+    rpcUrls: ['https://mainnet.base.org'],
+    blockExplorerUrls: ['https://basescan.org'],
+  },
+  [avalanche.id]: {
+    chainId: '0xa86a',
+    chainName: avalanche.name,
+    nativeCurrency: avalanche.nativeCurrency,
+    rpcUrls: ['https://api.avax.network/ext/bc/C/rpc'],
+    blockExplorerUrls: ['https://snowtrace.io'],
+  },
+  [bsc.id]: {
+    chainId: '0x38',
+    chainName: bsc.name,
+    nativeCurrency: bsc.nativeCurrency,
+    rpcUrls: ['https://bsc-dataseed.binance.org'],
+    blockExplorerUrls: ['https://bscscan.com'],
+  },
+  [giwaSepolia.id]: {
+    chainId: '0x164ce',
+    chainName: giwaSepolia.name,
+    nativeCurrency: giwaSepolia.nativeCurrency,
+    rpcUrls: ['https://sepolia-rpc.giwa.io'],
+    blockExplorerUrls: ['https://sepolia-explorer.giwa.io'],
+  },
+};
+
+async function getConnectedProvider(): Promise<Eip1193Provider | null> {
+  const { connector } = getAccount(config);
+  if (!connector) return null;
+
+  try {
+    const provider = await connector.getProvider();
+    if (!provider || typeof provider !== 'object') return null;
+    return provider as Eip1193Provider;
+  } catch {
+    return null;
+  }
+}
+
 /** MetaMask provider의 실제 eth_chainId (wagmi 캐시와 다를 수 있음) */
 export async function readProviderChainId(): Promise<number | null> {
   try {
-    const { connector } = getAccount(config);
-    if (!connector) return null;
-
-    const provider = await connector.getProvider();
-    if (!provider || typeof provider !== 'object') return null;
-
-    const request = (provider as { request?: (args: { method: string }) => Promise<string> })
-      .request;
+    const provider = await getConnectedProvider();
+    const request = provider?.request;
     if (!request) return null;
 
     const hex = await request({ method: 'eth_chainId' });
-    return Number.parseInt(hex, 16);
+    return typeof hex === 'string' ? Number.parseInt(hex, 16) : null;
   } catch {
     return null;
   }
@@ -31,15 +86,62 @@ export async function readProviderChainId(): Promise<number | null> {
 
 async function waitForProviderChain(
   targetChainId: SupportedChainId,
-  maxMs = 20000
+  maxMs = 12000
 ): Promise<boolean> {
+  const provider = await getConnectedProvider();
+  const targetHex = CHAIN_PARAMS[targetChainId].chainId.toLowerCase();
+  let chainChanged = false;
+
+  const listener = (hex: string) => {
+    if (hex.toLowerCase() === targetHex) chainChanged = true;
+  };
+
+  provider?.on?.('chainChanged', listener);
   const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    const current = await readProviderChainId();
-    if (current === targetChainId) return true;
-    await sleep(400);
+  try {
+    while (Date.now() - start < maxMs) {
+      if (chainChanged) return true;
+      const current = await readProviderChainId();
+      if (current === targetChainId) return true;
+      await sleep(250);
+    }
+    return false;
+  } finally {
+    provider?.removeListener?.('chainChanged', listener);
   }
-  return false;
+}
+
+function getWalletErrorCode(err: unknown): number | undefined {
+  const error = err as { code?: number; cause?: { code?: number }; data?: { originalError?: { code?: number } } };
+  return error.code ?? error.cause?.code ?? error.data?.originalError?.code;
+}
+
+async function switchWithProvider(targetChainId: SupportedChainId): Promise<void> {
+  const provider = await getConnectedProvider();
+  const request = provider?.request;
+  if (!request) {
+    await switchChain(config, { chainId: targetChainId });
+    return;
+  }
+
+  const chain = CHAIN_PARAMS[targetChainId];
+  try {
+    await request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: chain.chainId }],
+    });
+  } catch (err) {
+    if (getWalletErrorCode(err) !== 4902) throw err;
+
+    await request({
+      method: 'wallet_addEthereumChain',
+      params: [chain],
+    });
+    await request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: chain.chainId }],
+    });
+  }
 }
 
 /**
@@ -54,7 +156,7 @@ export async function ensureWalletOnChain(targetChainId: SupportedChainId): Prom
   if (useLinking) setWalletLinkingFlag(true);
 
   try {
-    await switchChain(config, { chainId: targetChainId });
+    await switchWithProvider(targetChainId);
   } catch (err) {
     const msg =
       (err as { shortMessage?: string })?.shortMessage ??
@@ -66,10 +168,11 @@ export async function ensureWalletOnChain(targetChainId: SupportedChainId): Prom
   const matched = await waitForProviderChain(targetChainId);
   if (!matched) {
     const after = await readProviderChainId();
+    const targetName = CHAIN_PARAMS[targetChainId].chainName;
     throw new Error(
       after != null
-        ? `지갑 네트워크를 Base(8453) 등 지원 체인으로 전환해주세요. (현재 chainId: ${after})`
-        : '지갑 네트워크 전환을 확인할 수 없습니다. MetaMask에서 Base 메인넷을 선택해주세요.'
+        ? `MetaMask에서 ${targetName} 네트워크 전환을 승인해주세요. (현재 chainId: ${after})`
+        : `MetaMask에서 ${targetName} 네트워크 전환을 승인해주세요.`
     );
   }
 }

@@ -29,8 +29,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/** AdMob 전면 광고 종료 후 WebView·앱 포그라운드가 안정될 때까지 대기 */
-async function waitForNativeAppActive(maxMs = 5000): Promise<void> {
+/** AdMob 전면 광고 종료 후 WebView·앱 포그라운드가 안정될 때까지만 짧게 대기 */
+async function waitForNativeAppActive(maxMs = 2500): Promise<void> {
   if (!isCapacitorNativeApp()) return;
 
   try {
@@ -47,9 +47,9 @@ async function waitForNativeAppActive(maxMs = 5000): Promise<void> {
         });
       });
     }
-    await sleep(700);
+    await sleep(150);
   } catch {
-    await sleep(900);
+    await sleep(250);
   }
 }
 
@@ -65,7 +65,10 @@ async function reconnectCurrentConnector(): Promise<void> {
   }
 }
 
-async function restoreWalletSession(chainId: SupportedChainId): Promise<Address | undefined> {
+async function restoreWalletSession(): Promise<Address | undefined> {
+  const existing = getAccount(config);
+  if (existing.address) return existing.address;
+
   try {
     await reconnect(config);
   } catch {
@@ -156,17 +159,24 @@ async function tryBuildClients(
 export async function ensureWagmiClients({
   chainId,
   expectedAddress,
-  maxAttempts = 36,
-  intervalMs = 500,
+  maxAttempts = 10,
+  intervalMs = 250,
 }: EnsureParams): Promise<{ walletClient: WalletClient; publicClient: PublicClient } | null> {
   await waitForNativeAppActive();
+
+  const initialAccount = getAccount(config);
+  const initialAddress = initialAccount.address ?? expectedAddress;
+  if (initialAddress) {
+    const clients = await tryBuildClients(chainId, initialAddress);
+    if (clients) return clients;
+  }
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt > 0) {
       await sleep(intervalMs);
     }
 
-    const restoredAddress = await restoreWalletSession(chainId);
+    const restoredAddress = await restoreWalletSession();
     const accountAddress = restoredAddress ?? expectedAddress;
     if (!accountAddress) continue;
 
