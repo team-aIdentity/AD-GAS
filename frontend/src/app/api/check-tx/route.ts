@@ -26,12 +26,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const rpcUrl = process.env.NEXT_PUBLIC_RPC_AVALANCHE || avalanche.rpcUrls.default.http[0];
     const publicClient = createPublicClient({
       chain: avalanche,
-      transport: http(
-        process.env.NEXT_PUBLIC_RPC_AVALANCHE ||
-          'https://avax-mainnet.g.alchemy.com/v2/Vx00GcGcS_QJVmhBGJrNj'
-      ),
+      transport: http(rpcUrl),
     });
 
     // 트랜잭션 정보 조회
@@ -71,6 +69,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 스폰서 주소(가스 대납 지갑). 키 로테이션 시 환경변수만 갱신하면 됨.
+    const sponsorAddress = process.env.NEXT_PUBLIC_SPONSOR_ADDRESS_AVALANCHE;
+
     // 컨트랙트 잔액 확인 (네이티브 토큰인 경우)
     let contractBalance = null;
     try {
@@ -107,11 +108,18 @@ export async function GET(req: NextRequest) {
       allEvents: allEvents,
       contractBalance: contractBalance?.toString() || null,
       gasPaidBy: tx.from, // From 주소가 가스비를 지불한 주소
-      isSponsored: tx.from.toLowerCase() === '0x39f1e010fb6832dbf81da5eb2ff8f631987a212d',
+      // 스폰서 주소는 환경변수로 설정(키 로테이션 대응). 미설정 시 판정 보류(null).
+      isSponsored: sponsorAddress
+        ? tx.from.toLowerCase() === sponsorAddress.toLowerCase()
+        : null,
       hasTransferEvent: transferEvent !== null,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    // 내부 에러 상세는 서버 로그로만 남기고, 클라이언트에는 일반 메시지만 반환
+    console.error('[check-tx] error:', error);
+    return NextResponse.json(
+      { error: '트랜잭션 정보를 조회할 수 없습니다.' },
+      { status: 500 }
+    );
   }
 }

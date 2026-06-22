@@ -6,6 +6,7 @@ import {
   parseUnits,
   getAddress,
   hexToSignature,
+  recoverTypedDataAddress,
 } from 'viem';
 import { base, avalanche, bsc } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -235,8 +236,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    checkAndIncreaseDailyLimit(from);
-
     const { chain, rpcUrl } = getChainConfig(chainId);
     const sponsorPk = getSponsorPrivateKey(chainId);
     const account = privateKeyToAccount(sponsorPk);
@@ -268,6 +267,49 @@ export async function POST(req: NextRequest) {
     }
     const tokenAddress = tokenDef.address;
     const amountUnits = parseUnits(amount, tokenDef.decimals);
+
+    // 서명 사전 검증: 스폰서가 reverting 트랜잭션에 가스를 낭비하지 않도록
+    // 전송 전에 EIP-712 Transfer 서명이 정말 `from`이 한 것인지 확인한다.
+    // (컨트랙트의 도메인/타입과 동일해야 한다)
+    let recovered: `0x${string}`;
+    try {
+      recovered = await recoverTypedDataAddress({
+        domain: {
+          name: 'AdWalletSponsoredTransfer',
+          version: '1',
+          chainId: BigInt(chainId),
+          verifyingContract: contractAddress,
+        },
+        types: {
+          Transfer: [
+            { name: 'from', type: 'address' },
+            { name: 'to', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+            { name: 'token', type: 'address' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'nonce', type: 'uint256' },
+          ],
+        },
+        primaryType: 'Transfer',
+        message: {
+          from,
+          to,
+          amount: amountUnits,
+          token: tokenAddress,
+          chainId: BigInt(chainId),
+          nonce: BigInt(nonce),
+        },
+        signature: signature as `0x${string}`,
+      });
+    } catch {
+      return NextResponse.json({ error: '서명을 검증할 수 없습니다.' }, { status: 400 });
+    }
+    if (getAddress(recovered) !== getAddress(from)) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+    }
+
+    // 서명이 유효할 때만 일일 무료 한도를 차감한다.
+    checkAndIncreaseDailyLimit(from);
 
     const walletClient = createWalletClient({
       account,
