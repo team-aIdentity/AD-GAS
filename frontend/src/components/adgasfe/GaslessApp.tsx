@@ -43,7 +43,7 @@ import {
   signTypedDataForTx,
 } from '@/lib/walletSigning';
 import { ensureWalletOnChain, type SupportedChainId } from '@/lib/ensureWalletChain';
-import { writeContract } from '@wagmi/core';
+import { writeContract, getPublicClient } from '@wagmi/core';
 import { config as wagmiConfig } from '@/wagmi.config';
 import { ensureWagmiClients } from '@/lib/ensureWagmiClients';
 
@@ -51,6 +51,135 @@ const DAILY_LIMIT = 10;
 
 // 광고 시청 검증 게이팅(서버 AD_GATING_ENABLED와 함께 켜야 함). 켜지면 광고 표시 전 챌린지를 발급한다.
 const AD_GATING_ENABLED = process.env.NEXT_PUBLIC_AD_GATING_ENABLED === 'true';
+
+// ───── 서명 전 읽기 데이터 prefetch (C: 병렬화 / D: 광고 재생 중 선행 로드) ─────
+const NONCES_ABI = [
+  {
+    inputs: [{ name: 'owner', type: 'address' }],
+    name: 'nonces',
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+const VERSION_ABI = [
+  {
+    inputs: [],
+    name: 'version',
+    outputs: [{ type: 'string' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+function resolveContractAddressForChain(chainId: SupportedChainId): `0x${string}` | undefined {
+  switch (chainId) {
+    case 8453:
+      return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE as `0x${string}` | undefined;
+    case 43114:
+      return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE as `0x${string}` | undefined;
+    case 56:
+      return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB as `0x${string}` | undefined;
+    case 91342:
+      return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA as `0x${string}` | undefined;
+    default:
+      return undefined;
+  }
+}
+
+type TransferReads = {
+  contractAddress: `0x${string}`;
+  tokenAddress: `0x${string}`;
+  amountUnits: bigint;
+  tokenDef: NonNullable<ReturnType<typeof findChainToken>>;
+  contractNonce: bigint;
+  allowance: bigint;
+  tokenPermitNonce?: bigint;
+  tokenName?: string;
+  tokenVersion?: string;
+};
+
+/**
+ * 서명에 필요한 읽기 전용 온체인 데이터를 한 번에(병렬) 가져온다.
+ * 지갑/포그라운드와 무관한 public client를 쓰므로 광고 재생 중에도 동작한다.
+ */
+async function loadTransferReads(
+  chainId: SupportedChainId,
+  owner: `0x${string}`,
+  tokenSymbol: string,
+  amountStr: string
+): Promise<TransferReads> {
+  const contractAddress = resolveContractAddressForChain(chainId);
+  if (!contractAddress) throw new Error(`체인 ${chainId} 컨트랙트가 설정되지 않았습니다.`);
+  const tokenDef = findChainToken(chainId, tokenSymbol);
+  if (!tokenDef) throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
+  const tokenAddress = tokenDef.address as `0x${string}`;
+  const amountUnits = parseUnits(amountStr, tokenDef.decimals);
+
+  const publicClient = getPublicClient(wagmiConfig, { chainId });
+  if (!publicClient) throw new Error('네트워크 클라이언트를 준비할 수 없습니다.');
+
+  const supportsPermit = !!tokenDef.permit;
+  const [code, contractNonce, allowance, tokenPermitNonce, tokenName, tokenVersion] =
+    await Promise.all([
+      publicClient.getBytecode({ address: contractAddress }),
+      publicClient.readContract({
+        address: contractAddress,
+        abi: NONCES_ABI,
+        functionName: 'nonces',
+        args: [owner],
+      }),
+      publicClient.readContract({
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [owner, contractAddress],
+      }),
+      supportsPermit
+        ? publicClient
+            .readContract({ address: tokenAddress, abi: NONCES_ABI, functionName: 'nonces', args: [owner] })
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+      supportsPermit
+        ? publicClient
+            .readContract({ address: tokenAddress, abi: erc20Abi, functionName: 'name' })
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+      supportsPermit
+        ? publicClient
+            .readContract({ address: tokenAddress, abi: VERSION_ABI, functionName: 'version' })
+            .catch(() => undefined)
+        : Promise.resolve(undefined),
+    ]);
+
+  if (!code || code === '0x') {
+    throw new Error(
+      `주소 ${contractAddress}에 컨트랙트가 없습니다 (EOA일 수 있음). 컨트랙트 주소 설정을 확인해주세요.`
+    );
+  }
+
+  return {
+    contractAddress,
+    tokenAddress,
+    amountUnits,
+    tokenDef,
+    contractNonce: contractNonce as bigint,
+    allowance: allowance as bigint,
+    tokenPermitNonce: tokenPermitNonce as bigint | undefined,
+    tokenName: typeof tokenName === 'string' ? tokenName : undefined,
+    tokenVersion: typeof tokenVersion === 'string' ? tokenVersion : undefined,
+  };
+}
+
+function transferReadsKey(
+  chainId: number,
+  owner: string,
+  tokenSymbol: string,
+  amountStr: string
+): string {
+  return `${chainId}:${owner.toLowerCase()}:${tokenSymbol}:${amountStr}`;
+}
 
 function detectMobileLayout(): boolean {
   if (typeof navigator !== 'undefined') {
@@ -117,6 +246,8 @@ export function GaslessApp() {
   const [isWalletLinking, setIsWalletLinking] = useState(false);
   const walletLinkingRef = useRef(false);
   const unsupportedChainWarnedRef = useRef<number | null>(null);
+  // 광고 재생 중 미리 가져온 서명용 읽기 데이터 (D: prefetch)
+  const prefetchRef = useRef<{ key: string; promise: Promise<TransferReads> } | null>(null);
 
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(DEFAULT_NETWORK);
   const [activeTab, setActiveTab] = useState<'send' | 'transaction'>('send');
@@ -480,122 +611,63 @@ export function GaslessApp() {
         return;
       }
 
-      // 컨트랙트 코드 존재 여부 확인
-      const code = await activePublicClient.getBytecode({ address: contractAddress });
-      console.log('[handleAdComplete] Contract code check:', {
-        address: contractAddress,
-        hasCode: code && code !== '0x',
-        codeLength: code?.length,
-      });
-
-      if (!code || code === '0x') {
-        throw new Error(
-          `주소 ${contractAddress}는 컨트랙트가 아닙니다 (EOA 지갑 주소일 수 있습니다). ` +
-            `AdWalletSponsoredTransfer 컨트랙트를 배포하고 올바른 컨트랙트 주소를 .env.local에 설정해주세요. ` +
-            `배포 명령: cd contracts && npm run deploy:sponsored-transfer:avalanche`
-        );
-      }
-
-      // 사용자 nonce 조회
-      let nonce: bigint;
+      // 서명에 필요한 읽기 데이터: 광고 재생 중 prefetch된 값이 있으면 재사용,
+      // 없으면 지금 병렬로 한 번에 로드(C). 직렬 RPC 왕복을 제거해 서명창이 빠르게 뜬다.
+      const readsKey = transferReadsKey(
+        targetChainId,
+        address,
+        selectedToken.symbol,
+        pendingTransaction.amount
+      );
+      let reads: TransferReads;
       try {
-        nonce = await activePublicClient.readContract({
-          address: contractAddress,
-          abi: [
-            {
-              inputs: [{ name: 'user', type: 'address' }],
-              name: 'nonces',
-              outputs: [{ name: '', type: 'uint256' }],
-              stateMutability: 'view',
-              type: 'function',
-            },
-          ],
-          functionName: 'nonces',
-          args: [address],
-        });
-      } catch (nonceError: any) {
-        throw new Error(
-          `컨트랙트에서 nonces 함수를 호출할 수 없습니다. ` +
-            `주소 ${contractAddress}가 올바른 AdWalletSponsoredTransfer 컨트랙트인지 확인해주세요. ` +
-            `에러: ${nonceError?.message || String(nonceError)}`
+        if (prefetchRef.current && prefetchRef.current.key === readsKey) {
+          reads = await prefetchRef.current.promise;
+        } else {
+          reads = await loadTransferReads(
+            targetChainId,
+            address,
+            selectedToken.symbol,
+            pendingTransaction.amount
+          );
+        }
+      } catch {
+        // prefetch 실패 시 직접 재시도(공개 RPC 일시 오류 등)
+        reads = await loadTransferReads(
+          targetChainId,
+          address,
+          selectedToken.symbol,
+          pendingTransaction.amount
         );
+      } finally {
+        prefetchRef.current = null;
       }
 
-      // 체인별 지원 토큰 (ERC20)
-      const tokenDef = findChainToken(targetChainId, selectedToken.symbol);
-      if (!tokenDef) {
-        throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
-      }
-      const tokenAddress = tokenDef.address;
-      const amountUnits = parseUnits(pendingTransaction.amount, tokenDef.decimals);
-
+      const { tokenDef, tokenAddress, amountUnits } = reads;
+      const nonce = reads.contractNonce;
       const permitConfig = tokenDef.permit;
       const supportsPermit = !!permitConfig;
 
       let permitSignature: string | undefined;
       let deadline: number | undefined;
 
-      const currentAllowance = await activePublicClient.readContract({
-        address: tokenAddress,
-        abi: erc20Abi,
-        functionName: 'allowance',
-        args: [address, contractAddress],
-      });
+      const currentAllowance = reads.allowance;
+
+      // 아래 if/else 흐름은 그대로 두고, 값만 prefetch 결과에서 채운다.
+      let permitDeadline = 0;
+      let tokenNonce: bigint = BigInt(0);
+      let permitDomainName = permitConfig?.name ?? '';
+      let permitDomainVersion = permitConfig?.version ?? '1';
 
       if (currentAllowance < amountUnits) {
         if (supportsPermit) {
           setTxStatusMessage(t('txModal.permitSign'));
           toast.info(t('txModal.permitSign'));
-          const permitDeadline = Math.floor(Date.now() / 1000) + 60 * 20;
-          const tokenNonce = await activePublicClient.readContract({
-            address: tokenAddress,
-            abi: [
-              {
-                inputs: [{ name: 'owner', type: 'address' }],
-                name: 'nonces',
-                outputs: [{ type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function',
-              },
-            ],
-            functionName: 'nonces',
-            args: [address],
-          });
-          // EIP-712 도메인: 토큰의 name()/version()을 온체인에서 읽어 사용 (Base Sepolia USDC는 name="USDC", version="2")
-          const permitVersionAbi = [
-            {
-              inputs: [],
-              name: 'version',
-              outputs: [{ type: 'string' }],
-              stateMutability: 'view',
-              type: 'function',
-            },
-          ] as const;
-          let permitDomainName = permitConfig!.name;
-          let permitDomainVersion = permitConfig!.version;
-          try {
-            const tokenName = await activePublicClient.readContract({
-              address: tokenAddress,
-              abi: erc20Abi,
-              functionName: 'name',
-              args: [],
-            });
-            if (typeof tokenName === 'string' && tokenName) permitDomainName = tokenName;
-          } catch {
-            /* 설정값 유지 */
-          }
-          try {
-            const tokenVersion = await activePublicClient.readContract({
-              address: tokenAddress,
-              abi: permitVersionAbi,
-              functionName: 'version',
-              args: [],
-            });
-            if (typeof tokenVersion === 'string' && tokenVersion)
-              permitDomainVersion = tokenVersion;
-          } catch {
-            /* 설정값 유지 (일부 토큰은 version() 없음) */
-          }
+          permitDeadline = Math.floor(Date.now() / 1000) + 60 * 20;
+          tokenNonce = reads.tokenPermitNonce ?? BigInt(0);
+          // EIP-712 도메인: prefetch로 읽은 토큰 name()/version() 사용 (없으면 설정값 유지)
+          if (reads.tokenName) permitDomainName = reads.tokenName;
+          if (reads.tokenVersion) permitDomainVersion = reads.tokenVersion;
           permitSignature = await signTypedDataForTx({
             account: address,
             ...(signingConnector ? { connector: signingConnector } : {}),
@@ -874,6 +946,14 @@ export function GaslessApp() {
       }
     }
     setAdChallengeId(challengeId);
+
+    // D: 광고 재생 동안 서명에 필요한 읽기 데이터를 미리 가져온다(서명창 지연 최소화).
+    if (address && selectedToken) {
+      const key = transferReadsKey(targetChainId, address, selectedToken.symbol, amount);
+      const p = loadTransferReads(targetChainId, address, selectedToken.symbol, amount);
+      p.catch(() => {}); // unhandledrejection 방지(실제 처리는 handleAdComplete에서)
+      prefetchRef.current = { key, promise: p };
+    }
 
     setPendingTransaction({
       to: recipientAddress.trim(),
