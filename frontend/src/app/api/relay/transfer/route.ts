@@ -12,6 +12,12 @@ import { base, avalanche, bsc } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { findChainToken } from '@/lib/tokens';
 import { giwaSepolia } from '@/lib/chains/giwaSepolia';
+import {
+  getRedis,
+  isAdGatingEnabled,
+  consumeChallengeForTransfer,
+  checkAndIncreaseDailyLimit as kvCheckAndIncreaseDailyLimit,
+} from '@/lib/server/adGating';
 
 export async function OPTIONS() {
   return NextResponse.json(
@@ -83,9 +89,11 @@ interface RelayBody {
   nonce?: number; // 사용자 nonce
   permitSignature?: string; // Permit 서명 (가스리스 approve)
   deadline?: number; // Permit 만료 시간 (unix timestamp)
+  challengeId?: string; // 광고 시청 검증 챌린지 ID (게이팅 활성 시 필수)
 }
 
-// 메모리 기반 1일 10회 제한 (from 주소 기준)
+// 폴백(게이팅 비활성 시): 메모리 기반 1일 10회 제한 (from 주소 기준)
+// 주의: 서버리스에서는 인스턴스별로 분리되어 신뢰할 수 없음. AD_GATING_ENABLED=true 권장.
 const dailyUsage = new Map<string, { date: string; count: number }>();
 const DAILY_LIMIT = 10;
 
@@ -94,7 +102,7 @@ function getTodayKey(address: string) {
   return `${address.toLowerCase()}::${today}`;
 }
 
-function checkAndIncreaseDailyLimit(from: string) {
+function checkAndIncreaseDailyLimitMemory(from: string) {
   const key = getTodayKey(from);
   const current = dailyUsage.get(key) || { date: new Date().toDateString(), count: 0 };
   if (current.count >= DAILY_LIMIT) {
@@ -212,8 +220,18 @@ function getContractAddress(chainId: SupportedChainId): `0x${string}` {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as RelayBody;
-    const { from, to, amount, tokenSymbol, chainId, signature, nonce, permitSignature, deadline } =
-      body;
+    const {
+      from,
+      to,
+      amount,
+      tokenSymbol,
+      chainId,
+      signature,
+      nonce,
+      permitSignature,
+      deadline,
+      challengeId,
+    } = body;
 
     if (!from || !to || !amount || !tokenSymbol || !chainId) {
       return NextResponse.json({ error: '필수 필드가 누락되었습니다.' }, { status: 400 });
@@ -308,8 +326,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
-    // 서명이 유효할 때만 일일 무료 한도를 차감한다.
-    checkAndIncreaseDailyLimit(from);
+    // 광고 시청 검증 게이팅(활성 시): 광고를 실제 시청한 챌린지만 무료 대납.
+    // 서명이 유효할 때만 한도를 차감한다.
+    if (isAdGatingEnabled()) {
+      const redis = getRedis();
+      if (!redis) {
+        // fail-closed: 게이팅이 켜져 있는데 저장소가 없으면 무료 대납을 막는다.
+        return NextResponse.json(
+          { error: '서버 저장소가 구성되지 않았습니다.' },
+          { status: 503 }
+        );
+      }
+      if (!challengeId) {
+        return NextResponse.json(
+          { error: '광고 시청 확인(challengeId)이 필요합니다.' },
+          { status: 400 }
+        );
+      }
+      await consumeChallengeForTransfer(redis, challengeId, {
+        from,
+        to,
+        amount,
+        tokenSymbol,
+        chainId,
+      });
+      await kvCheckAndIncreaseDailyLimit(redis, from);
+    } else {
+      // 폴백: 인메모리 한도(서버리스에서 신뢰 불가). 설정 완료 후 게이팅 활성 권장.
+      checkAndIncreaseDailyLimitMemory(from);
+    }
 
     const walletClient = createWalletClient({
       account,

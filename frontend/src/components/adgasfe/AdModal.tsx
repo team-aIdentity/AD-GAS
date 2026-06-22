@@ -23,6 +23,8 @@ interface AdModalProps {
   /** 설정 시: 재생 클릭 후 GPT(웹) 또는 AdMob(앱) 리워드 영상 */
   showRealRewardedAd?: (opts?: RewardedAdShowOptions) => Promise<void>;
   isRewardedAdConfigured?: boolean;
+  /** AdMob SSV 콜백에 전달할 값(앱 전용). customData=challengeId, userId=지갑 주소. */
+  ssv?: { customData?: string; userId?: string };
 }
 
 export function AdModal({
@@ -32,6 +34,7 @@ export function AdModal({
   transaction,
   showRealRewardedAd,
   isRewardedAdConfigured,
+  ssv,
 }: AdModalProps) {
   const { t } = useLocale();
   const [timeRemaining, setTimeRemaining] = useState(15);
@@ -70,6 +73,7 @@ export function AdModal({
             setAdSurfaceActive(true);
             setIsLoadingRealAd(false);
           },
+          ssv,
         });
         onComplete();
       } catch (e) {

@@ -13,6 +13,7 @@ export interface SponsoredTransferRequest {
   nonce?: number; // 사용자 nonce (메타트랜잭션용)
   permitSignature?: string; // EIP-2612 Permit 서명 (가스리스 approve)
   deadline?: number; // Permit 만료 시간 (unix timestamp)
+  challengeId?: string; // 광고 시청 검증 챌린지 ID (게이팅 활성 시 필수)
 }
 
 export interface SponsoredTransferResponse {

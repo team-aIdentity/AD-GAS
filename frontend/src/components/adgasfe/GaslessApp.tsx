@@ -35,6 +35,7 @@ import { useGoogleRewardedAd } from '@/hooks/useGoogleRewardedAd';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import { getCapacitorPreferredConnector } from '@/lib/walletConnectEnvironment';
 import { getRelayerApiBase } from '@/lib/relayerApiBase';
+import { getTurnstileToken } from '@/lib/turnstileClient';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
 import {
   beginWalletTxSigning,
@@ -47,6 +48,9 @@ import { config as wagmiConfig } from '@/wagmi.config';
 import { ensureWagmiClients } from '@/lib/ensureWagmiClients';
 
 const DAILY_LIMIT = 10;
+
+// 광고 시청 검증 게이팅(서버 AD_GATING_ENABLED와 함께 켜야 함). 켜지면 광고 표시 전 챌린지를 발급한다.
+const AD_GATING_ENABLED = process.env.NEXT_PUBLIC_AD_GATING_ENABLED === 'true';
 
 function detectMobileLayout(): boolean {
   if (typeof navigator !== 'undefined') {
@@ -122,6 +126,8 @@ export function GaslessApp() {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completedTxHash, setCompletedTxHash] = useState<string | null>(null);
+  // 광고 시청 검증 챌린지 ID (게이팅 활성 시): 광고 표시 전 발급 → 릴레이에 전달
+  const [adChallengeId, setAdChallengeId] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState<Token | null>(() =>
     getDefaultUiToken(DEFAULT_NETWORK.chainId)
   );
@@ -700,6 +706,7 @@ export function GaslessApp() {
         signature,
         nonce: Number(nonce),
         ...(permitSignature && deadline !== undefined && { permitSignature, deadline }),
+        ...(adChallengeId ? { challengeId: adChallengeId } : {}),
       });
       console.log('Sponsored transaction hash:', txHash);
       const newCount = getFreeTransactionsUsed() + 1;
@@ -730,6 +737,7 @@ export function GaslessApp() {
       setRecipientAddress('');
       setAmount('0.0001');
       setPendingTransaction(null);
+      setAdChallengeId(null);
     } catch (err: any) {
       // 더 상세한 에러 로깅
       console.error('[handleAdComplete Error] Raw error:', err);
@@ -772,6 +780,7 @@ export function GaslessApp() {
     selectedToken,
     selectedNetwork.name,
     selectedNetwork.chainId,
+    adChallengeId,
     t,
     mapErrorToMessage,
   ]);
@@ -779,6 +788,7 @@ export function GaslessApp() {
   const handleAdSkip = useCallback(() => {
     setShowAdModal(false);
     setPendingTransaction(null);
+    setAdChallengeId(null);
     toast.info(t('toast.adCancelled'));
   }, []);
 
@@ -830,6 +840,41 @@ export function GaslessApp() {
     }
 
     setUserError(null);
+
+    // 광고 시청 검증 게이팅: 광고 표시 전 챌린지 발급(앱=AdMob SSV, 웹=Turnstile best-effort).
+    // 실패 시 무료 대납을 진행하지 않는다(fail-closed).
+    let challengeId: string | null = null;
+    if (AD_GATING_ENABLED && address) {
+      try {
+        const isApp = isCapacitorNativeApp();
+        const turnstileToken = isApp ? undefined : await getTurnstileToken();
+        const res = await fetch(`${getRelayerApiBase()}/ad-challenge`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: address,
+            to: recipientAddress.trim(),
+            amount,
+            tokenSymbol: selectedToken.symbol,
+            chainId: targetChainId,
+            platform: isApp ? 'app' : 'web',
+            ...(turnstileToken ? { turnstileToken } : {}),
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error || '광고 시청 준비에 실패했습니다.');
+        }
+        const data = (await res.json()) as { challengeId: string };
+        challengeId = data.challengeId;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '광고 시청 준비에 실패했습니다.';
+        toast.error(msg);
+        return;
+      }
+    }
+    setAdChallengeId(challengeId);
+
     setPendingTransaction({
       to: recipientAddress.trim(),
       amount,
@@ -839,6 +884,7 @@ export function GaslessApp() {
     setShowAdModal(true);
   }, [
     isConnected,
+    address,
     recipientAddress,
     amount,
     selectedToken,
@@ -960,6 +1006,7 @@ export function GaslessApp() {
           transaction={pendingTransaction}
           showRealRewardedAd={rewardedAd.showRewardedAd}
           isRewardedAdConfigured={rewardedAd.isConfigured}
+          ssv={adChallengeId && address ? { customData: adChallengeId, userId: address } : undefined}
         />
         <TransactionModal
           isOpen={showTransactionModal}
@@ -1156,6 +1203,7 @@ export function GaslessApp() {
         transaction={pendingTransaction}
         showRealRewardedAd={rewardedAd.showRewardedAd}
         isRewardedAdConfigured={rewardedAd.isConfigured}
+        ssv={adChallengeId && address ? { customData: adChallengeId, userId: address } : undefined}
       />
       <TransactionModal
         isOpen={showTransactionModal}

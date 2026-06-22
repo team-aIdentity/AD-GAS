@@ -29,6 +29,8 @@ export function isAdMobRewardedConfigured(): boolean {
 export type ShowAdMobRewardedOptions = {
   /** 네이티브 전면 광고 직전 — WebView 위 레이어를 가리지 않도록 UI 숨김 */
   onBeforeAdSurface?: () => void;
+  /** AdMob SSV(Server-Side Verification) 콜백에 전달할 값. customData에 challengeId, userId에 지갑 주소. */
+  ssv?: { customData?: string; userId?: string };
 };
 
 /** 리워드 다이얼로그 닫기 후 WebView·MetaMask 딥링크 충돌 방지 */
@@ -74,9 +76,22 @@ export async function showAdMobRewardedVideo(options?: ShowAdMobRewardedOptions)
 
   const { AdMob } = await import('@capacitor-community/admob');
 
+  // SSV: customData(=challengeId)/userId가 있으면 AdMob 서버 검증 콜백으로 전달된다.
+  const ssv = options?.ssv;
+  const ssvOption =
+    ssv && (ssv.customData || ssv.userId)
+      ? {
+          ssv: {
+            ...(ssv.customData ? { customData: ssv.customData } : {}),
+            ...(ssv.userId ? { userId: ssv.userId } : {}),
+          } as { customData: string } | { userId: string },
+        }
+      : {};
+
   await AdMob.prepareRewardVideoAd({
     adId,
     isTesting: useTestAds,
+    ...ssvOption,
   });
 
   return new Promise((resolve, reject) => {
