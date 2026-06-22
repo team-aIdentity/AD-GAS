@@ -1,0 +1,99 @@
+name: Build Android APK
+
+# 수동 실행: Actions 탭 → Build Android APK → Run workflow
+# 빌드된 디버그 APK는 실행 결과(run)의 Artifacts에서 다운로드합니다.
+on:
+  workflow_dispatch:
+    inputs:
+      use_test_ads:
+        description: 'AdMob 테스트 광고 사용 (true/false)'
+        default: 'true'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web (static export)
+        env:
+          # 릴레이/네트워크 (NEXT_PUBLIC_* 는 빌드 시 APK에 inline 됨)
+          NEXT_PUBLIC_RELAYER_API_BASE: ${{ secrets.NEXT_PUBLIC_RELAYER_API_BASE || vars.NEXT_PUBLIC_RELAYER_API_BASE }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL || vars.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || vars.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
+          # 컨트랙트 주소 (체인별)
+          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE }}
+          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE }}
+          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB }}
+          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA }}
+          # RPC (체인별)
+          NEXT_PUBLIC_RPC_BASE: ${{ secrets.NEXT_PUBLIC_RPC_BASE || vars.NEXT_PUBLIC_RPC_BASE }}
+          NEXT_PUBLIC_RPC_AVALANCHE: ${{ secrets.NEXT_PUBLIC_RPC_AVALANCHE || vars.NEXT_PUBLIC_RPC_AVALANCHE }}
+          NEXT_PUBLIC_RPC_BNB: ${{ secrets.NEXT_PUBLIC_RPC_BNB || vars.NEXT_PUBLIC_RPC_BNB }}
+          NEXT_PUBLIC_RPC_GIWA_SEPOLIA: ${{ secrets.NEXT_PUBLIC_RPC_GIWA_SEPOLIA || vars.NEXT_PUBLIC_RPC_GIWA_SEPOLIA }}
+          # AdMob 리워드 광고 단위
+          NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID: ${{ secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID || vars.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID }}
+          NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID: ${{ secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID || vars.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID }}
+          NEXT_PUBLIC_ADMOB_USE_TEST_ADS: ${{ github.event.inputs.use_test_ads }}
+          # MetaMask 딥링크
+          NEXT_PUBLIC_METAMASK_USE_DEEPLINK: ${{ vars.NEXT_PUBLIC_METAMASK_USE_DEEPLINK }}
+        run: npm run build:mobile
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Inject AdMob App ID into AndroidManifest
+        env:
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID || vars.ADMOB_APP_ID || 'ca-app-pub-3940256099942544~3347511713' }}
+        run: |
+          node -e "
+          const fs = require('fs');
+          const p = 'android/app/src/main/AndroidManifest.xml';
+          let x = fs.readFileSync(p, 'utf8');
+          const id = process.env.ADMOB_APP_ID;
+          if (!x.includes('com.google.android.gms.ads.APPLICATION_ID')) {
+            const meta = '        <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"' + id + '\"/>\n    </application>';
+            x = x.replace('</application>', meta);
+            fs.writeFileSync(p, x);
+          }
+          console.log('AdMob APPLICATION_ID =', id);
+          "
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ad-gas-debug-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

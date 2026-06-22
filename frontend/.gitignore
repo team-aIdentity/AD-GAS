@@ -17,6 +17,10 @@
 /.next/
 /out/
 
+# capacitor native (CI에서 생성)
+/android/
+/ios/
+
 # production
 /build
 
