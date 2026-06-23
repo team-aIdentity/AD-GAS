@@ -2,6 +2,9 @@ name: Build Android APK
 
 # 수동 실행: Actions 탭 → Build Android APK → Run workflow
 # 빌드된 디버그 APK는 실행 결과(run)의 Artifacts에서 다운로드합니다.
+#
+# 환경변수는 Vercel 프로젝트(ad-gas)에서 직접 끌어옵니다(vercel env pull).
+# 따라서 GitHub Actions에는 토큰 1개(VERCEL_TOKEN)만 추가하면 됩니다.
 on:
   workflow_dispatch:
     inputs:
@@ -12,23 +15,19 @@ on:
 permissions:
   contents: read
 
+env:
+  # 비밀 아님(공개 식별자). Vercel 프로젝트 ad-gas.
+  VERCEL_ORG_ID: team_s8ew59VizFsHeaYvpDJIJ0DV
+  VERCEL_PROJECT_ID: prj_YpWh8gJHfP8FzgpFoXFf45Xs0aCQ
+
 jobs:
-  # 진단: 어떤 Secret이 빌드에 도달하는지 값 노출 없이 true/false로 확인
-  diagnose-secrets:
+  diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Secret/Variable presence (no values shown)
+      - name: Token presence (no values shown)
         run: |
-          echo "NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID set: ${{ (secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID != '') || (vars.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID != '') }}"
-          echo "NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID set:         ${{ (secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID != '') || (vars.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID != '') }}"
-          echo "ADMOB_APP_ID set:                                  ${{ (secrets.ADMOB_APP_ID != '') || (vars.ADMOB_APP_ID != '') }}"
-          echo "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID set:          ${{ (secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID != '') || (vars.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID != '') }}"
-          echo "NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE set:  ${{ (secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE != '') || (vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE != '') }}"
-          echo "NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE set:       ${{ (secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE != '') || (vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE != '') }}"
-          echo "NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB set:        ${{ (secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB != '') || (vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB != '') }}"
-          echo "NEXT_PUBLIC_RPC_AVALANCHE set:                     ${{ (secrets.NEXT_PUBLIC_RPC_AVALANCHE != '') || (vars.NEXT_PUBLIC_RPC_AVALANCHE != '') }}"
-          echo "NEXT_PUBLIC_RPC_BASE set:                          ${{ (secrets.NEXT_PUBLIC_RPC_BASE != '') || (vars.NEXT_PUBLIC_RPC_BASE != '') }}"
-          echo "NEXT_PUBLIC_RELAYER_API_BASE set:                  ${{ (secrets.NEXT_PUBLIC_RELAYER_API_BASE != '') || (vars.NEXT_PUBLIC_RELAYER_API_BASE != '') }}"
+          echo "VERCEL_TOKEN set: ${{ secrets.VERCEL_TOKEN != '' }}"
+          echo "(VERCEL_TOKEN 이 false 면 GitHub 저장소 Actions Secret 에 VERCEL_TOKEN 을 추가하세요)"
 
   build-apk:
     runs-on: ubuntu-latest
@@ -57,38 +56,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Pull env vars from Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN 이 설정되지 않았습니다. GitHub 저장소 Settings → Secrets and variables → Actions → Repository secrets 에 VERCEL_TOKEN 을 추가하세요."
+            exit 1
+          fi
+          npx --yes vercel@latest env pull .env.local \
+            --environment=production \
+            --token="$VERCEL_TOKEN" --yes
+          echo "Pulled the following env keys (values hidden):"
+          grep -oE '^[A-Za-z0-9_]+' .env.local | sort | sed 's/^/  /'
+
       - name: Build web (static export)
         env:
-          # 릴레이/네트워크 (NEXT_PUBLIC_* 는 빌드 시 APK에 inline 됨)
-          NEXT_PUBLIC_RELAYER_API_BASE: ${{ secrets.NEXT_PUBLIC_RELAYER_API_BASE || vars.NEXT_PUBLIC_RELAYER_API_BASE }}
-          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL || vars.NEXT_PUBLIC_APP_URL }}
-          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || vars.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
-          # 컨트랙트 주소 (체인별)
-          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE }}
-          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE }}
-          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB }}
-          NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA: ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA || vars.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA }}
-          # RPC (체인별)
-          NEXT_PUBLIC_RPC_BASE: ${{ secrets.NEXT_PUBLIC_RPC_BASE || vars.NEXT_PUBLIC_RPC_BASE }}
-          NEXT_PUBLIC_RPC_AVALANCHE: ${{ secrets.NEXT_PUBLIC_RPC_AVALANCHE || vars.NEXT_PUBLIC_RPC_AVALANCHE }}
-          NEXT_PUBLIC_RPC_BNB: ${{ secrets.NEXT_PUBLIC_RPC_BNB || vars.NEXT_PUBLIC_RPC_BNB }}
-          NEXT_PUBLIC_RPC_GIWA_SEPOLIA: ${{ secrets.NEXT_PUBLIC_RPC_GIWA_SEPOLIA || vars.NEXT_PUBLIC_RPC_GIWA_SEPOLIA }}
-          # AdMob 리워드 광고 단위
-          NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID: ${{ secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID || vars.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID }}
-          NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID: ${{ secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID || vars.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID }}
+          # 테스트 광고 여부는 실행 입력값으로 덮어씀(.env.local 값보다 우선)
           NEXT_PUBLIC_ADMOB_USE_TEST_ADS: ${{ github.event.inputs.use_test_ads }}
-          # MetaMask 딥링크
-          NEXT_PUBLIC_METAMASK_USE_DEEPLINK: ${{ vars.NEXT_PUBLIC_METAMASK_USE_DEEPLINK }}
         run: npm run build:mobile
 
       - name: Add Android platform
         run: npx cap add android
 
       - name: Inject AdMob App ID into AndroidManifest
-        env:
-          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID || vars.ADMOB_APP_ID || 'ca-app-pub-3940256099942544~3347511713' }}
         run: |
-          node -e "
+          ADMOB_APP_ID=$(grep -E '^ADMOB_APP_ID=' .env.local 2>/dev/null | head -1 | cut -d= -f2- | sed 's/^"//; s/"$//')
+          if [ -z "$ADMOB_APP_ID" ]; then
+            echo "::warning::ADMOB_APP_ID 가 Vercel 환경변수에 없습니다. 구글 테스트 앱 ID로 대체합니다."
+            ADMOB_APP_ID="ca-app-pub-3940256099942544~3347511713"
+          fi
+          ADMOB_APP_ID="$ADMOB_APP_ID" node -e "
           const fs = require('fs');
           const p = 'android/app/src/main/AndroidManifest.xml';
           let x = fs.readFileSync(p, 'utf8');
@@ -98,7 +96,7 @@ jobs:
             x = x.replace('</application>', meta);
             fs.writeFileSync(p, x);
           }
-          console.log('AdMob APPLICATION_ID =', id);
+          console.log('AdMob APPLICATION_ID injected (length ' + id.length + ')');
           "
 
       - name: Sync Capacitor
