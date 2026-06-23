@@ -42,9 +42,13 @@ export function getCapacitorPreferredConnector(
 
 export function filterConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   if (isCapacitorNativeApp()) {
-    const preferred = getCapacitorPreferredConnector(connectors);
-    if (preferred) return [preferred];
-    return connectors;
+    // 앱: MetaMask 딥링크 우선 + (projectId 설정 시) WalletConnect도 함께 노출.
+    const mm = connectors.filter(c => c.id === METAMASK_ID);
+    const wc = isWalletConnectProjectConfigured()
+      ? connectors.filter(c => c.id === WC_ID)
+      : [];
+    const out = [...mm, ...wc];
+    return out.length > 0 ? out : connectors;
   }
   if (isNonInjectedWalletContext()) {
     const wc = connectors.filter(c => c.id === WC_ID);
@@ -55,7 +59,7 @@ export function filterConnectorsForEnvironment(connectors: readonly Connector[])
   return connectors.filter(c => c.id !== WC_ID);
 }
 
-/** 순서: WalletConnect → MetaMask SDK → Injected */
+/** 순서: 앱은 MetaMask → WalletConnect, 그 외는 WalletConnect → MetaMask → Injected */
 export function orderConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   const base = filterConnectorsForEnvironment(connectors);
   const wc = base.filter(c => c.id === WC_ID);
@@ -64,5 +68,9 @@ export function orderConnectorsForEnvironment(connectors: readonly Connector[]):
   const rest = base.filter(
     c => c.id !== WC_ID && c.id !== METAMASK_ID && c.id !== INJECTED_ID
   );
+  // 앱에서는 MetaMask를 먼저(딥링크가 가장 빠름), 그다음 WalletConnect
+  if (isCapacitorNativeApp()) {
+    return [...mm, ...wc, ...inj, ...rest];
+  }
   return [...wc, ...mm, ...inj, ...rest];
 }

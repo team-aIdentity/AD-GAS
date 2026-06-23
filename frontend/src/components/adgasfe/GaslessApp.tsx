@@ -43,7 +43,7 @@ import {
   signTypedDataForTx,
 } from '@/lib/walletSigning';
 import { ensureWalletOnChain, type SupportedChainId } from '@/lib/ensureWalletChain';
-import { writeContract, getPublicClient } from '@wagmi/core';
+import { writeContract, getPublicClient, getAccount } from '@wagmi/core';
 import { config as wagmiConfig } from '@/wagmi.config';
 import { ensureWagmiClients } from '@/lib/ensureWagmiClients';
 
@@ -580,7 +580,10 @@ export function GaslessApp() {
         throw new Error(t('errors.walletNotReadyAfterAd'));
       }
       const { publicClient: activePublicClient } = clients;
-      const signingConnector = getCapacitorPreferredConnector(wagmiConfig.connectors);
+      // 실제 연결된 지갑(MetaMask 또는 WalletConnect)으로 서명. 없으면 MetaMask 딥링크로 폴백.
+      const signingConnector =
+        getAccount(wagmiConfig).connector ??
+        getCapacitorPreferredConnector(wagmiConfig.connectors);
       setTxStatusMessage(t('txModal.preparingTransfer'));
 
       // 컨트랙트 주소 조회 (체인별 환경 변수)

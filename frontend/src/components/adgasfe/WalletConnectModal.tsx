@@ -54,8 +54,11 @@ export function WalletConnectModal({
   const showWcSetupWarning = nativeApp && !wcOk && !preferredNative;
 
   const connectorLabel = (c: Connector) => {
-    if (c.id === 'metaMaskSDK' || (c.id === 'walletConnect' && nativeApp)) {
+    if (c.id === 'metaMaskSDK') {
       return t('walletConnect.metamaskViaWc');
+    }
+    if (c.id === 'walletConnect') {
+      return 'WalletConnect';
     }
     return c.name;
   };
