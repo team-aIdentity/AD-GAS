@@ -13,6 +13,23 @@ permissions:
   contents: read
 
 jobs:
+  # 진단: 어떤 Secret이 빌드에 도달하는지 값 노출 없이 true/false로 확인
+  diagnose-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Secret presence (no values shown)
+        run: |
+          echo "NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID set: ${{ secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID != '' }}"
+          echo "NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID set:         ${{ secrets.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID != '' }}"
+          echo "ADMOB_APP_ID set:                                  ${{ secrets.ADMOB_APP_ID != '' }}"
+          echo "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID set:          ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID != '' }}"
+          echo "NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE set:  ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE != '' }}"
+          echo "NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE set:       ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE != '' }}"
+          echo "NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB set:        ${{ secrets.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB != '' }}"
+          echo "NEXT_PUBLIC_RPC_AVALANCHE set:                     ${{ secrets.NEXT_PUBLIC_RPC_AVALANCHE != '' }}"
+          echo "NEXT_PUBLIC_RPC_BASE set:                          ${{ secrets.NEXT_PUBLIC_RPC_BASE != '' }}"
+          echo "NEXT_PUBLIC_RELAYER_API_BASE set:                  ${{ secrets.NEXT_PUBLIC_RELAYER_API_BASE != '' }}"
+
   build-apk:
     runs-on: ubuntu-latest
     defaults:
