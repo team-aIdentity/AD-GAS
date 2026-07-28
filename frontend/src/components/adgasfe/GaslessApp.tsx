@@ -881,6 +881,13 @@ export function GaslessApp() {
       return;
     }
     if (!selectedToken) {
+      // 해당 체인에 지원 토큰이 아예 없으면(예: GIWA 토큰 주소 미설정) 원인을 명확히 안내
+      if (getChainTokens(selectedNetwork.chainId).length === 0) {
+        toast.error(
+          `${selectedNetwork.name}에서 사용할 수 있는 토큰이 설정되지 않았습니다. 관리자에게 문의해 주세요.`
+        );
+        return;
+      }
       toast.error(t('toast.selectToken'));
       return;
     }

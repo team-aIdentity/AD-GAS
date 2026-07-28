@@ -44,7 +44,7 @@ export const SUPPORTED_NETWORKS: Network[] = [
     type: 'Testnet',
     icon: CHAIN_TO_ICON[giwaSepolia.id] ?? '◆',
     nativeToken: giwaSepolia.nativeCurrency.symbol,
-    enabled: false, // 배포 전 — 가스 충전 후 활성화
+    enabled: true,
   },
 ];
 
