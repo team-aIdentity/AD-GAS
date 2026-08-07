@@ -23,9 +23,8 @@ export function isWalletConnectProjectConfigured(): boolean {
 }
 
 /**
- * Capacitor: WalletConnect 우선. MetaMask SDK 세션은 앱 복귀 시 최초 체인으로
- * 되돌아가는 경우가 있어, 멀티체인 전환은 WalletConnect 세션이 더 안정적이다.
- * WalletConnect 설정이 없을 때만 MetaMask SDK를 폴백으로 사용한다.
+ * Capacitor: MetaMask SDK를 우선한다. 연결 시작과 앱 복귀 시 서로 다른
+ * 커넥터를 선택하면 pending 세션이 유실되므로 하나의 경로로 통일한다.
  * 모바일 브라우저(무주입): WC → MetaMask SDK.
  * 데스크톱: WalletConnect 숨김, MetaMask SDK + Injected.
  */
@@ -33,21 +32,18 @@ export function getCapacitorPreferredConnector(
   connectors: readonly Connector[]
 ): Connector | undefined {
   if (!isCapacitorNativeApp()) return undefined;
+  const mm = connectors.find(c => c.id === METAMASK_ID);
+  if (mm) return mm;
   if (isWalletConnectProjectConfigured()) {
-    const wc = connectors.find(c => c.id === WC_ID);
-    if (wc) return wc;
+    return connectors.find(c => c.id === WC_ID);
   }
-  return connectors.find(c => c.id === METAMASK_ID);
+  return undefined;
 }
 
 export function filterConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   if (isCapacitorNativeApp()) {
-    const mm = connectors.filter(c => c.id === METAMASK_ID);
-    const wc = isWalletConnectProjectConfigured()
-      ? connectors.filter(c => c.id === WC_ID)
-      : [];
-    const mobileConnectors = [...mm, ...wc];
-    return mobileConnectors.length > 0 ? mobileConnectors : connectors;
+    const preferred = getCapacitorPreferredConnector(connectors);
+    return preferred ? [preferred] : connectors;
   }
   if (isNonInjectedWalletContext()) {
     const wc = connectors.filter(c => c.id === WC_ID);

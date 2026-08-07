@@ -320,7 +320,9 @@ export function GaslessApp() {
 
   const handleConnect = useCallback(() => {
     const nativeApp = isCapacitorNativeApp();
-    walletLinkingRef.current = !nativeApp;
+    // 모달을 여는 것만으로 자동 연결하지는 않지만, 사용자가 커넥터를 선택한 뒤
+    // MetaMask에서 앱으로 복귀할 때 pending connect를 재개할 수 있도록 ref는 유지한다.
+    walletLinkingRef.current = true;
     setIsWalletLinking(false);
     if (nativeApp) setWalletLinkingFlag(false);
     flushSync(() => setShowConnectModal(true));
