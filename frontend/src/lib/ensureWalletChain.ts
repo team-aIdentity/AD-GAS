@@ -11,6 +11,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function withTimeout<T>(promise: Promise<T>, maxMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(message)), maxMs);
+    promise.then(
+      value => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      error => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+}
+
 type Eip1193Provider = {
   request?: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
@@ -62,7 +78,11 @@ async function getConnectedProvider(): Promise<Eip1193Provider | null> {
   if (!connector) return null;
 
   try {
-    const provider = await connector.getProvider();
+    const provider = await withTimeout(
+      connector.getProvider(),
+      5000,
+      '지갑 연결 응답이 지연되고 있습니다. 지갑을 다시 연결해주세요.'
+    );
     if (!provider || typeof provider !== 'object') return null;
     return provider as Eip1193Provider;
   } catch {
@@ -77,7 +97,11 @@ export async function readProviderChainId(): Promise<number | null> {
     const request = provider?.request;
     if (!request) return null;
 
-    const hex = await request({ method: 'eth_chainId' });
+    const hex = await withTimeout(
+      request({ method: 'eth_chainId' }),
+      5000,
+      '지갑 네트워크 확인 시간이 초과되었습니다.'
+    );
     return typeof hex === 'string' ? Number.parseInt(hex, 16) : null;
   } catch {
     return null;
@@ -126,21 +150,33 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
 
   const chain = CHAIN_PARAMS[targetChainId];
   try {
-    await request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: chain.chainId }],
-    });
+    await withTimeout(
+      request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: chain.chainId }],
+      }),
+      20000,
+      `${chain.chainName} 네트워크 전환 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
+    );
   } catch (err) {
     if (getWalletErrorCode(err) !== 4902) throw err;
 
-    await request({
-      method: 'wallet_addEthereumChain',
-      params: [chain],
-    });
-    await request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: chain.chainId }],
-    });
+    await withTimeout(
+      request({
+        method: 'wallet_addEthereumChain',
+        params: [chain],
+      }),
+      20000,
+      `${chain.chainName} 네트워크 추가 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
+    );
+    await withTimeout(
+      request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: chain.chainId }],
+      }),
+      20000,
+      `${chain.chainName} 네트워크 전환 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
+    );
   }
 }
 
