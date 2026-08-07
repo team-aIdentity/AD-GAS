@@ -13,7 +13,6 @@ import {
   orderConnectorsForEnvironment,
 } from '@/lib/walletConnectEnvironment';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
-import { DEFAULT_NETWORK } from '@/lib/networks';
 
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
 
@@ -26,6 +25,7 @@ interface WalletConnectModalProps {
   isPending: boolean;
   /** Capacitor: connect() 호출 직후 isPending 전에도 로딩 UI 표시 */
   isLinking?: boolean;
+  targetChainId: 8453 | 91342 | 43114 | 56;
 }
 
 /**
@@ -38,7 +38,7 @@ export function WalletConnectModal({
   connect,
   reset,
   isPending,
-  isLinking = false,
+  targetChainId,
 }: WalletConnectModalProps) {
   const { t } = useLocale();
   const nativeApp = typeof window !== 'undefined' && isCapacitorNativeApp();
@@ -54,8 +54,14 @@ export function WalletConnectModal({
   const showWcSetupWarning = nativeApp && !wcOk && !preferredNative;
 
   const connectorLabel = (c: Connector) => {
-    if (c.id === 'metaMaskSDK' || (c.id === 'walletConnect' && nativeApp)) {
-      return t('walletConnect.metamaskViaWc');
+    if (nativeApp && c.id === 'metaMaskSDK') {
+      return 'MetaMask 빠른 연결';
+    }
+    if (nativeApp && c.id === 'walletConnect') {
+      return 'MetaMask (WalletConnect)';
+    }
+    if (c.id === 'metaMaskSDK') {
+      return 'MetaMask';
     }
     return c.name;
   };
@@ -63,7 +69,7 @@ export function WalletConnectModal({
   const startConnect = (connector: Connector) => {
     if (nativeApp) setWalletLinkingFlag(true);
     connect(
-      { connector, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
+      { connector, chainId: targetChainId },
       {
         onSuccess: () => {
           setWalletLinkingFlag(false);
@@ -89,7 +95,7 @@ export function WalletConnectModal({
     onClose();
   };
 
-  const nativeConnecting = nativeApp && (isPending || isLinking);
+  const nativeConnecting = nativeApp && isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">

@@ -319,11 +319,15 @@ export function GaslessApp() {
   }, [connect, connectors, accountStatus, selectedNetwork.chainId, t]);
 
   const handleConnect = useCallback(() => {
-    walletLinkingRef.current = true;
-    setIsWalletLinking(true);
     const nativeApp = isCapacitorNativeApp();
-    if (nativeApp) setWalletLinkingFlag(true);
+    walletLinkingRef.current = !nativeApp;
+    setIsWalletLinking(false);
+    if (nativeApp) setWalletLinkingFlag(false);
     flushSync(() => setShowConnectModal(true));
+
+    // 모바일에서는 자동 연결하지 않고 선택 모달을 즉시 표시한다.
+    // 실제 연결과 linking flag 설정은 WalletConnectModal의 버튼 클릭 시 시작한다.
+    if (nativeApp) return;
 
     const startConnection = () => {
       resetConnect();
@@ -364,11 +368,7 @@ export function GaslessApp() {
 
     // Capacitor WebView가 모달을 한 프레임 먼저 그린 뒤 WalletConnect 초기화를 시작한다.
     // 초기화가 메인 스레드를 점유해 모달 자체가 늦게 나타나는 현상을 방지한다.
-    if (nativeApp) {
-      requestAnimationFrame(() => requestAnimationFrame(startConnection));
-    } else {
-      requestAnimationFrame(startConnection);
-    }
+    requestAnimationFrame(startConnection);
   }, [connect, connectors, resetConnect, selectedNetwork.chainId, t]);
 
   const handleDisconnect = useCallback(() => {
@@ -922,6 +922,7 @@ export function GaslessApp() {
           reset={resetConnect}
           isPending={isConnectPending}
           isLinking={isWalletLinking}
+          targetChainId={selectedNetwork.chainId as 8453 | 91342 | 43114 | 56}
         />
         <Toaster />
       </div>
@@ -1158,6 +1159,7 @@ export function GaslessApp() {
         reset={resetConnect}
         isPending={isConnectPending}
         isLinking={isWalletLinking}
+        targetChainId={selectedNetwork.chainId as 8453 | 91342 | 43114 | 56}
       />
       <AdModal
         isOpen={showAdModal}

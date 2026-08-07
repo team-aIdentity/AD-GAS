@@ -42,9 +42,12 @@ export function getCapacitorPreferredConnector(
 
 export function filterConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   if (isCapacitorNativeApp()) {
-    const preferred = getCapacitorPreferredConnector(connectors);
-    if (preferred) return [preferred];
-    return connectors;
+    const mm = connectors.filter(c => c.id === METAMASK_ID);
+    const wc = isWalletConnectProjectConfigured()
+      ? connectors.filter(c => c.id === WC_ID)
+      : [];
+    const mobileConnectors = [...mm, ...wc];
+    return mobileConnectors.length > 0 ? mobileConnectors : connectors;
   }
   if (isNonInjectedWalletContext()) {
     const wc = connectors.filter(c => c.id === WC_ID);
@@ -58,6 +61,7 @@ export function filterConnectorsForEnvironment(connectors: readonly Connector[])
 /** 순서: WalletConnect → MetaMask SDK → Injected */
 export function orderConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   const base = filterConnectorsForEnvironment(connectors);
+  if (isCapacitorNativeApp()) return base;
   const wc = base.filter(c => c.id === WC_ID);
   const mm = base.filter(c => c.id === METAMASK_ID);
   const inj = base.filter(c => c.id === INJECTED_ID);
