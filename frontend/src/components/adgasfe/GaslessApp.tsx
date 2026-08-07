@@ -408,9 +408,15 @@ export function GaslessApp() {
   );
 
   const handleAdComplete = useCallback(async () => {
-    setShowAdModal(false);
-    setTxStatusMessage(t('txModal.checkingNetwork'));
-    setShowTransactionModal(true);
+    flushSync(() => {
+      setShowAdModal(false);
+      setTxStatusMessage(t('txModal.checkingNetwork'));
+      setShowTransactionModal(true);
+    });
+
+    // 광고 화면이 닫힌 직후 지갑 작업을 시작하면 모바일 WebView가 확인 모달을
+    // 그리기 전에 MetaMask로 전환될 수 있으므로, 먼저 모달을 화면에 반영한다.
+    await new Promise<void>(resolve => window.setTimeout(resolve, 150));
 
     if (!address || !pendingTransaction || !selectedToken) {
       setShowTransactionModal(false);
