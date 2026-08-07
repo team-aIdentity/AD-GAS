@@ -287,10 +287,10 @@ export function GaslessApp() {
           if (!preferred) return;
 
           connect(
-            { connector: preferred, chainId: selectedNetwork.chainId as 8453 | 91342 | 43114 | 56 },
+            { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
             {
               onSuccess: () => {
-                void ensureWalletOnChain(selectedNetwork.chainId as SupportedChainId)
+                void ensureWalletOnChain(DEFAULT_NETWORK.chainId as SupportedChainId)
                   .catch(() => {
                     toast.error(t('toast.networkSwitchFailed'));
                   })
@@ -316,33 +316,27 @@ export function GaslessApp() {
       cancelled = true;
       void listener?.remove();
     };
-  }, [connect, connectors, accountStatus, selectedNetwork.chainId, t]);
+  }, [connect, connectors, accountStatus]);
 
   const handleConnect = useCallback(() => {
-    const nativeApp = isCapacitorNativeApp();
-    // 모달을 여는 것만으로 자동 연결하지는 않지만, 사용자가 커넥터를 선택한 뒤
-    // MetaMask에서 앱으로 복귀할 때 pending connect를 재개할 수 있도록 ref는 유지한다.
+    resetConnect();
     walletLinkingRef.current = true;
-    setIsWalletLinking(false);
-    if (nativeApp) setWalletLinkingFlag(false);
+    setIsWalletLinking(true);
+    if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
     flushSync(() => setShowConnectModal(true));
 
-    // 모바일에서는 자동 연결하지 않고 선택 모달을 즉시 표시한다.
-    // 실제 연결과 linking flag 설정은 WalletConnectModal의 버튼 클릭 시 시작한다.
-    if (nativeApp) return;
+    const preferred = getCapacitorPreferredConnector(connectors);
+    if (!preferred) {
+      setIsWalletLinking(false);
+      return;
+    }
 
-    const startConnection = () => {
-      resetConnect();
-      const preferred = getCapacitorPreferredConnector(connectors);
-      if (!preferred) {
-        setIsWalletLinking(false);
-        return;
-      }
+    requestAnimationFrame(() => {
       connect(
-        { connector: preferred, chainId: selectedNetwork.chainId as 8453 | 91342 | 43114 | 56 },
+        { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
         {
           onSuccess: () => {
-            void ensureWalletOnChain(selectedNetwork.chainId as SupportedChainId)
+            void ensureWalletOnChain(DEFAULT_NETWORK.chainId as SupportedChainId)
               .catch(() => {
                 toast.error(t('toast.networkSwitchFailed'));
               })
@@ -366,12 +360,8 @@ export function GaslessApp() {
           },
         }
       );
-    };
-
-    // Capacitor WebView가 모달을 한 프레임 먼저 그린 뒤 WalletConnect 초기화를 시작한다.
-    // 초기화가 메인 스레드를 점유해 모달 자체가 늦게 나타나는 현상을 방지한다.
-    requestAnimationFrame(startConnection);
-  }, [connect, connectors, resetConnect, selectedNetwork.chainId, t]);
+    });
+  }, [connect, connectors, resetConnect, t]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
@@ -924,7 +914,6 @@ export function GaslessApp() {
           reset={resetConnect}
           isPending={isConnectPending}
           isLinking={isWalletLinking}
-          targetChainId={selectedNetwork.chainId as 8453 | 91342 | 43114 | 56}
         />
         <Toaster />
       </div>
@@ -1161,7 +1150,6 @@ export function GaslessApp() {
         reset={resetConnect}
         isPending={isConnectPending}
         isLinking={isWalletLinking}
-        targetChainId={selectedNetwork.chainId as 8453 | 91342 | 43114 | 56}
       />
       <AdModal
         isOpen={showAdModal}

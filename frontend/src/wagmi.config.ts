@@ -1,12 +1,11 @@
 import { http, createConfig } from 'wagmi'
 import { base, avalanche, bsc } from 'wagmi/chains'
-import { metaMask, walletConnect } from 'wagmi/connectors'
+import { injected, metaMask, walletConnect } from 'wagmi/connectors'
 import { openMetaMaskDeeplink } from '@/lib/metamaskOpenDeeplink'
 import { giwaSepolia } from '@/lib/chains/giwaSepolia'
 
 // 지원 체인: Base 메인넷 / GIWA Sepolia / Avalanche / BNB (4개)
-// Capacitor WebView: WalletConnect → MetaMask. 데스크톱: MetaMask SDK 전용.
-// 범용 injected provider는 다른 멀티체인 확장 프로그램의 깨진 provider를 선택할 수 있어 제외한다.
+// Capacitor WebView: WalletConnect → MetaMask. 데스크톱: MetaMask SDK + Injected (UI에서 WC 숨김)
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id'
 
 const dappMetadataUrl =
@@ -37,6 +36,7 @@ export const config = createConfig({
       useDeeplink: metamaskUseDeeplink,
       openDeeplink: openMetaMaskDeeplink,
     }),
+    injected(),
   ],
   transports: {
     [base.id]: http(RPC_URLS[base.id]),

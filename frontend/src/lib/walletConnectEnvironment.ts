@@ -23,8 +23,8 @@ export function isWalletConnectProjectConfigured(): boolean {
 }
 
 /**
- * Capacitor: MetaMask SDK를 우선한다. 연결 시작과 앱 복귀 시 서로 다른
- * 커넥터를 선택하면 pending 세션이 유실되므로 하나의 경로로 통일한다.
+ * Capacitor: MetaMask SDK(딥링크) 우선 — WC보다 빠르고 WebView와 궁합이 좋음.
+ * WC는 MetaMask SDK가 없거나 projectId만 있을 때 폴백.
  * 모바일 브라우저(무주입): WC → MetaMask SDK.
  * 데스크톱: WalletConnect 숨김, MetaMask SDK + Injected.
  */
@@ -43,7 +43,8 @@ export function getCapacitorPreferredConnector(
 export function filterConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   if (isCapacitorNativeApp()) {
     const preferred = getCapacitorPreferredConnector(connectors);
-    return preferred ? [preferred] : connectors;
+    if (preferred) return [preferred];
+    return connectors;
   }
   if (isNonInjectedWalletContext()) {
     const wc = connectors.filter(c => c.id === WC_ID);
@@ -57,7 +58,6 @@ export function filterConnectorsForEnvironment(connectors: readonly Connector[])
 /** 순서: WalletConnect → MetaMask SDK → Injected */
 export function orderConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {
   const base = filterConnectorsForEnvironment(connectors);
-  if (isCapacitorNativeApp()) return base;
   const wc = base.filter(c => c.id === WC_ID);
   const mm = base.filter(c => c.id === METAMASK_ID);
   const inj = base.filter(c => c.id === INJECTED_ID);
