@@ -144,7 +144,11 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
   const provider = await getConnectedProvider();
   const request = provider?.request;
   if (!request) {
-    await switchChain(config, { chainId: targetChainId });
+    await withTimeout(
+      switchChain(config, { chainId: targetChainId }),
+      20000,
+      `${CHAIN_PARAMS[targetChainId].chainName} 네트워크 전환 요청 시간이 초과되었습니다. 지갑 확장 프로그램을 다시 연결해주세요.`
+    );
     return;
   }
 

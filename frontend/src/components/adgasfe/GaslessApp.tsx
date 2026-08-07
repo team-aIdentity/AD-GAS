@@ -815,9 +815,9 @@ export function GaslessApp() {
 
     const targetChainId = selectedNetwork.chainId as SupportedChainId;
     setIsPreparingSend(true);
+    const networkToastId = toast.loading(`${selectedNetwork.name} 네트워크 확인 중...`);
     try {
       if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
-      toast.info(`${selectedNetwork.name} 네트워크 확인 중...`);
       await ensureWalletOnChain(targetChainId);
     } catch (err) {
       const msg =
@@ -825,6 +825,7 @@ export function GaslessApp() {
       toast.error(msg);
       return;
     } finally {
+      toast.dismiss(networkToastId);
       if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
       setIsPreparingSend(false);
     }
