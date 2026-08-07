@@ -110,6 +110,30 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
       usdPrice: 1,
     },
   ],
+  // GIWA Sepolia — GIWA 공식 문서에서 주소가 확인되는 ERC-20
+  91342: [
+    {
+      symbol: 'WETH',
+      name: 'Wrapped Ether',
+      address: '0x4200000000000000000000000000000000000006',
+      decimals: 18,
+      category: 'token',
+    },
+    {
+      symbol: 'TEST',
+      name: 'TestToken',
+      address: '0xBCdB22f56642DE57624CfC2fBb9eE398cF3CA268',
+      decimals: 18,
+      category: 'token',
+    },
+    {
+      symbol: 'FAUCET',
+      name: 'FaucetToken',
+      address: '0xB11E5c9070a57C0c33Df102436C440a2c73a4c38',
+      decimals: 18,
+      category: 'token',
+    },
+  ],
 };
 
 // GIWA Sepolia: 공식 문서에 표준 스테이블 주소가 없어 USDC/USDT는 선택적 환경 변수로 설정
@@ -117,9 +141,9 @@ const giwaSepoliaUsdc = parseOptionalTokenAddr(process.env.NEXT_PUBLIC_GIWA_SEPO
 const giwaSepoliaUsdt = parseOptionalTokenAddr(process.env.NEXT_PUBLIC_GIWA_SEPOLIA_USDT);
 
 function buildGiwaTokens(): TokenDef[] {
-  if (!giwaSepoliaUsdc) return [];
-  const tokens: TokenDef[] = [
-    {
+  const tokens: TokenDef[] = [];
+  if (giwaSepoliaUsdc) {
+    tokens.push({
       symbol: 'USDC',
       name: 'USD Coin',
       address: giwaSepoliaUsdc,
@@ -127,8 +151,8 @@ function buildGiwaTokens(): TokenDef[] {
       category: 'stablecoin',
       usdPrice: 1,
       permit: { name: 'USD Coin', version: '2' },
-    },
-  ];
+    });
+  }
   if (giwaSepoliaUsdt) {
     tokens.push({
       symbol: 'USDT',
@@ -146,7 +170,7 @@ export const CHAIN_TOKENS: Record<number, TokenDef[]> = { ...STATIC_CHAIN_TOKENS
 
 const giwaTokens = buildGiwaTokens();
 if (giwaTokens.length > 0) {
-  CHAIN_TOKENS[91342] = giwaTokens;
+  CHAIN_TOKENS[91342] = [...(CHAIN_TOKENS[91342] ?? []), ...giwaTokens];
 }
 
 export function getChainTokens(chainId: number | undefined): TokenDef[] {
