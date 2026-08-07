@@ -121,7 +121,7 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
     },
     {
       symbol: 'TEST',
-      name: 'TestToken',
+      name: 'Dojang VerifiedToken',
       address: '0xBCdB22f56642DE57624CfC2fBb9eE398cF3CA268',
       decimals: 18,
       category: 'token',
