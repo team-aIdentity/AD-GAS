@@ -331,7 +331,7 @@ export function GaslessApp() {
       return;
     }
 
-    requestAnimationFrame(() => {
+    window.setTimeout(() => {
       connect(
         { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
         {
@@ -360,7 +360,7 @@ export function GaslessApp() {
           },
         }
       );
-    });
+    }, 150);
   }, [connect, connectors, resetConnect, t]);
 
   const handleDisconnect = useCallback(() => {
@@ -408,15 +408,9 @@ export function GaslessApp() {
   );
 
   const handleAdComplete = useCallback(async () => {
-    flushSync(() => {
-      setShowAdModal(false);
-      setTxStatusMessage(t('txModal.checkingNetwork'));
-      setShowTransactionModal(true);
-    });
-
-    // 광고 화면이 닫힌 직후 지갑 작업을 시작하면 모바일 WebView가 확인 모달을
-    // 그리기 전에 MetaMask로 전환될 수 있으므로, 먼저 모달을 화면에 반영한다.
-    await new Promise<void>(resolve => window.setTimeout(resolve, 150));
+    setShowAdModal(false);
+    setTxStatusMessage(t('txModal.checkingNetwork'));
+    setShowTransactionModal(true);
 
     if (!address || !pendingTransaction || !selectedToken) {
       setShowTransactionModal(false);
@@ -535,6 +529,7 @@ export function GaslessApp() {
 
       let permitSignature: string | undefined;
       let deadline: number | undefined;
+      let approvalTransactionSent = false;
 
       const currentAllowance = await activePublicClient.readContract({
         address: tokenAddress,
@@ -641,6 +636,7 @@ export function GaslessApp() {
             args: [contractAddress, maxUint256],
           });
           await activePublicClient.waitForTransactionReceipt({ hash: approveHash });
+          approvalTransactionSent = true;
           toast.success(t('toast.tokenApproved'));
         }
       }
@@ -689,7 +685,7 @@ export function GaslessApp() {
           primaryType: 'Transfer',
           message,
         },
-        { immediateAfterWalletReturn: !!permitSignature }
+        { immediateAfterWalletReturn: !!permitSignature || approvalTransactionSent }
       );
 
       console.log('[handleAdComplete] Signature received:', signature);
