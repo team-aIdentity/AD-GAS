@@ -180,7 +180,6 @@ export function GaslessApp() {
 
   const connectedChainId = useChainId();
   const chainId = connectedChainId || undefined;
-  const connectedNetwork = chainId ? SUPPORTED_NETWORKS.find(n => n.chainId === chainId) : undefined;
 
   // 지갑 연결·체인 변경 시 UI 선택과 동기화
   useEffect(() => {
@@ -199,8 +198,10 @@ export function GaslessApp() {
     }
   }, [isConnected, chainId]);
 
-  // 지원하지 않는 지갑 체인(Base Sepolia 등)에 있을 때는 UI 선택 네트워크 기준으로 유지
-  const tokenChainId = (isConnected && connectedNetwork ? connectedNetwork.chainId : selectedNetwork.chainId) as
+  // 토큰 목록과 잔액은 사용자가 선택한 네트워크를 기준으로 조회한다.
+  // 모바일 지갑의 chainId 이벤트는 앱 복귀 후 늦게 도착할 수 있으므로,
+  // connectedNetwork를 우선하면 전환 직후 이전 체인의 토큰이 잠시 표시된다.
+  const tokenChainId = selectedNetwork.chainId as
     | 8453
     | 91342
     | 43114
