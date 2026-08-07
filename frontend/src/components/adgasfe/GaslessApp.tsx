@@ -286,10 +286,10 @@ export function GaslessApp() {
           if (!preferred) return;
 
           connect(
-            { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
+            { connector: preferred, chainId: selectedNetwork.chainId as 8453 | 91342 | 43114 | 56 },
             {
               onSuccess: () => {
-                void ensureWalletOnChain(DEFAULT_NETWORK.chainId as SupportedChainId)
+                void ensureWalletOnChain(selectedNetwork.chainId as SupportedChainId)
                   .catch(() => {
                     toast.error(t('toast.networkSwitchFailed'));
                   })
@@ -315,7 +315,7 @@ export function GaslessApp() {
       cancelled = true;
       void listener?.remove();
     };
-  }, [connect, connectors, accountStatus]);
+  }, [connect, connectors, accountStatus, selectedNetwork.chainId, t]);
 
   const handleConnect = useCallback(() => {
     resetConnect();
@@ -332,10 +332,10 @@ export function GaslessApp() {
 
     requestAnimationFrame(() => {
       connect(
-        { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
+        { connector: preferred, chainId: selectedNetwork.chainId as 8453 | 91342 | 43114 | 56 },
         {
           onSuccess: () => {
-            void ensureWalletOnChain(DEFAULT_NETWORK.chainId as SupportedChainId)
+            void ensureWalletOnChain(selectedNetwork.chainId as SupportedChainId)
               .catch(() => {
                 toast.error(t('toast.networkSwitchFailed'));
               })
@@ -360,7 +360,7 @@ export function GaslessApp() {
         }
       );
     });
-  }, [connect, connectors, resetConnect, t]);
+  }, [connect, connectors, resetConnect, selectedNetwork.chainId, t]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
