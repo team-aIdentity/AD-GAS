@@ -331,7 +331,7 @@ export function GaslessApp() {
       return;
     }
 
-    requestAnimationFrame(() => {
+    window.setTimeout(() => {
       connect(
         { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
         {
@@ -360,7 +360,7 @@ export function GaslessApp() {
           },
         }
       );
-    });
+    }, 150);
   }, [connect, connectors, resetConnect, t]);
 
   const handleDisconnect = useCallback(() => {
