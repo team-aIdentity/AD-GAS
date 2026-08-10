@@ -15,6 +15,13 @@ const dappMetadataUrl =
 
 const metamaskUseDeeplink = process.env.NEXT_PUBLIC_METAMASK_USE_DEEPLINK !== 'false'
 
+const walletMetadata = {
+  name: 'AD GAS',
+  description: 'Watch ads and send gas-sponsored transactions',
+  url: 'https://adgas.app',
+  icons: ['https://adgas.app/logo.png'],
+}
+
 const RPC_URLS: Record<number, string> = {
   [base.id]: process.env.NEXT_PUBLIC_RPC_BASE || 'https://mainnet.base.org',
   [giwaSepolia.id]:
@@ -26,7 +33,7 @@ const RPC_URLS: Record<number, string> = {
 export const config = createConfig({
   chains: [base, giwaSepolia, avalanche, bsc],
   connectors: [
-    walletConnect({ projectId }),
+    walletConnect({ projectId, metadata: walletMetadata }),
     metaMask({
       dappMetadata: {
         name: 'AD GAS',
