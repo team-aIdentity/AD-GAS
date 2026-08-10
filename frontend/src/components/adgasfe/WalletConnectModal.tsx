@@ -1,19 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import type { Connector, UseConnectReturnType } from 'wagmi';
+import { reconnect } from '@wagmi/core';
 import { config } from '@/wagmi.config';
 import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import {
   orderConnectorsForEnvironment,
-  resetCapacitorMetaMaskSession,
 } from '@/lib/walletConnectEnvironment';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
-import type { SupportedChainId } from '@/lib/ensureWalletChain';
+import { ensureWalletOnChain, type SupportedChainId } from '@/lib/ensureWalletChain';
 
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
 
@@ -25,8 +25,14 @@ interface WalletConnectModalProps {
   reset: () => void;
   isPending: boolean;
   targetChainId: SupportedChainId;
-  /** Capacitor: connect() 호출 직후 isPending 전에도 로딩 UI 표시 */
-  isLinking?: boolean;
+}
+
+function isAlreadyConnectedError(error: unknown): boolean {
+  const message =
+    (error as { shortMessage?: string })?.shortMessage ??
+    (error as Error)?.message ??
+    '';
+  return /connector\s+already\s+connected|already\s+connected/i.test(message);
 }
 
 /**
@@ -40,9 +46,10 @@ export function WalletConnectModal({
   reset,
   isPending,
   targetChainId,
-  isLinking = false,
 }: WalletConnectModalProps) {
   const { t } = useLocale();
+  const [isStarting, setIsStarting] = useState(false);
+  const startingRef = useRef(false);
   const nativeApp = typeof window !== 'undefined' && isCapacitorNativeApp();
   const visibleConnectors = useMemo(
     () => orderConnectorsForEnvironment(connectors),
@@ -55,24 +62,74 @@ export function WalletConnectModal({
     return c.name;
   };
 
+  useEffect(() => {
+    if (open) return;
+    startingRef.current = false;
+    setIsStarting(false);
+  }, [open]);
+
+  const finishConnected = async () => {
+    try {
+      await ensureWalletOnChain(targetChainId);
+    } catch {
+      toast.error(t('toast.networkSwitchFailed'));
+    } finally {
+      startingRef.current = false;
+      setIsStarting(false);
+      setWalletLinkingFlag(false);
+      onClose();
+    }
+  };
+
+  const tryRestoreConnection = async (connector: Connector): Promise<boolean> => {
+    try {
+      const connections = await reconnect(config, { connectors: [connector] });
+      return connections.some(connection => connection.connector.uid === connector.uid);
+    } catch {
+      return false;
+    }
+  };
+
   const startConnect = async (connector: Connector) => {
+    if (startingRef.current || isPending) return;
+    startingRef.current = true;
+    setIsStarting(true);
     if (nativeApp) setWalletLinkingFlag(true);
-    await resetCapacitorMetaMaskSession(connector);
+
+    try {
+      if ((await connector.isAuthorized()) && (await tryRestoreConnection(connector))) {
+        await finishConnected();
+        return;
+      }
+    } catch {
+      // 승인 세션 조회 실패 시 일반 연결 요청으로 계속한다.
+    }
+
     connect(
       { connector, chainId: targetChainId },
       {
         onSuccess: () => {
-          setWalletLinkingFlag(false);
-          onClose();
+          void finishConnected();
         },
         onError: err => {
-          setWalletLinkingFlag(false);
-          reset();
-          const msg =
-            (err as { shortMessage?: string })?.shortMessage ??
-            (err as Error)?.message ??
-            t('errors.generic');
-          toast.error(msg);
+          void (async () => {
+            // MetaMask SDK 세션은 살아 있지만 Wagmi 상태만 끊긴 경우에는
+            // 두 번째 connect 대신 기존 승인 세션을 다시 등록한다.
+            if (isAlreadyConnectedError(err) && (await tryRestoreConnection(connector))) {
+              await finishConnected();
+              return;
+            }
+
+            startingRef.current = false;
+            setIsStarting(false);
+            setWalletLinkingFlag(false);
+            reset();
+            const msg =
+              (err as { shortMessage?: string })?.shortMessage ??
+              (err as Error)?.message ??
+              t('errors.generic');
+            toast.error(msg);
+          })();
         },
       }
     );
@@ -82,10 +139,13 @@ export function WalletConnectModal({
 
   const handleClose = () => {
     reset();
+    startingRef.current = false;
+    setIsStarting(false);
+    setWalletLinkingFlag(false);
     onClose();
   };
 
-  const nativeConnecting = nativeApp && (isPending || isLinking);
+  const nativeConnecting = nativeApp && (isPending || isStarting);
 
   return createPortal(
     <div
@@ -117,7 +177,7 @@ export function WalletConnectModal({
                 <button
                   key={connector.uid}
                   type="button"
-                  disabled={isPending}
+                  disabled={isPending || isStarting}
                   onClick={() => void startConnect(connector)}
                   className="w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] px-4 py-3 text-left font-medium text-white transition-colors hover:bg-[rgba(99,102,241,0.13)] disabled:opacity-50"
                 >

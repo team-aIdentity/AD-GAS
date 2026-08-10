@@ -35,7 +35,6 @@ import { useGoogleRewardedAd } from '@/hooks/useGoogleRewardedAd';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import {
   getCapacitorPreferredConnector,
-  resetCapacitorMetaMaskSession,
 } from '@/lib/walletConnectEnvironment';
 import { getRelayerApiBase } from '@/lib/relayerApiBase';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
@@ -118,8 +117,6 @@ export function GaslessApp() {
   };
   const [isMobile, setIsMobile] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [isWalletLinking, setIsWalletLinking] = useState(false);
-  const walletLinkingRef = useRef(false);
   const unsupportedChainWarnedRef = useRef<number | null>(null);
 
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(DEFAULT_NETWORK);
@@ -258,124 +255,10 @@ export function GaslessApp() {
 
   const walletShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '';
 
-  useEffect(() => {
-    if (isConnected && isWalletLinking) {
-      walletLinkingRef.current = false;
-      setIsWalletLinking(false);
-      setWalletLinkingFlag(false);
-      setShowConnectModal(false);
-    }
-  }, [isConnected, isWalletLinking]);
-
-  // MetaMask 복귀 후 connect가 끊긴 경우 1회 재시도
-  useEffect(() => {
-    if (!isCapacitorNativeApp()) return;
-
-    let cancelled = false;
-    let listener: { remove: () => Promise<void> } | undefined;
-
-    void import('@capacitor/app').then(({ App }) =>
-      App.addListener('appStateChange', ({ isActive }) => {
-        if (!isActive || cancelled || !walletLinkingRef.current) return;
-
-        window.setTimeout(() => {
-          if (cancelled || !walletLinkingRef.current) return;
-          if (accountStatus === 'connected' || accountStatus === 'connecting') return;
-
-          const preferred = getCapacitorPreferredConnector(connectors);
-          if (!preferred) return;
-
-          const targetChainId = selectedNetworkRef.current.chainId as SupportedChainId;
-          networkIntentChainIdRef.current = targetChainId;
-
-          connect(
-            { connector: preferred, chainId: targetChainId },
-            {
-              onSuccess: () => {
-                void ensureWalletOnChain(targetChainId)
-                  .catch(() => {
-                    toast.error(t('toast.networkSwitchFailed'));
-                  })
-                  .finally(() => {
-                    walletLinkingRef.current = false;
-                    setIsWalletLinking(false);
-                    setWalletLinkingFlag(false);
-                    setShowConnectModal(false);
-                  });
-              },
-              onError: () => {
-                /* CapacitorWalletBootstrap reconnect 폴링에 맡김 */
-              },
-            }
-          );
-        }, 700);
-      }).then(h => {
-        listener = h;
-      })
-    );
-
-    return () => {
-      cancelled = true;
-      void listener?.remove();
-    };
-  }, [connect, connectors, accountStatus]);
-
   const handleConnect = useCallback(() => {
     resetConnect();
-    walletLinkingRef.current = true;
-    setIsWalletLinking(true);
-    if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
     flushSync(() => setShowConnectModal(true));
-
-    const preferred = getCapacitorPreferredConnector(connectors);
-    if (!preferred) {
-      walletLinkingRef.current = false;
-      setIsWalletLinking(false);
-      setWalletLinkingFlag(false);
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      void resetCapacitorMetaMaskSession(preferred).then(() => {
-        if (!walletLinkingRef.current) return;
-
-        const targetChainId = selectedNetworkRef.current.chainId as SupportedChainId;
-        networkIntentChainIdRef.current = targetChainId;
-
-        connect(
-          {
-            connector: preferred,
-            chainId: targetChainId,
-          },
-          {
-            onSuccess: () => {
-              void ensureWalletOnChain(targetChainId)
-                .catch(() => {
-                  toast.error(t('toast.networkSwitchFailed'));
-                })
-                .finally(() => {
-                  walletLinkingRef.current = false;
-                  setIsWalletLinking(false);
-                  setWalletLinkingFlag(false);
-                  setShowConnectModal(false);
-                });
-            },
-            onError: err => {
-              walletLinkingRef.current = false;
-              setIsWalletLinking(false);
-              setWalletLinkingFlag(false);
-              resetConnect();
-              const msg =
-                (err as { shortMessage?: string })?.shortMessage ??
-                (err as Error)?.message ??
-                t('errors.generic');
-              toast.error(msg);
-            },
-          }
-        );
-      });
-    });
-  }, [connect, connectors, resetConnect, t]);
+  }, [resetConnect]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();
@@ -915,8 +798,6 @@ export function GaslessApp() {
         <WalletConnectModal
           open={showConnectModal}
           onClose={() => {
-            setIsWalletLinking(false);
-            walletLinkingRef.current = false;
             setWalletLinkingFlag(false);
             setShowConnectModal(false);
           }}
@@ -925,7 +806,6 @@ export function GaslessApp() {
           reset={resetConnect}
           isPending={isConnectPending}
           targetChainId={selectedNetwork.chainId as SupportedChainId}
-          isLinking={isWalletLinking}
         />
         <Toaster />
       </div>
@@ -1153,8 +1033,6 @@ export function GaslessApp() {
       <WalletConnectModal
         open={showConnectModal}
         onClose={() => {
-          setIsWalletLinking(false);
-          walletLinkingRef.current = false;
           setWalletLinkingFlag(false);
           setShowConnectModal(false);
         }}
@@ -1163,7 +1041,6 @@ export function GaslessApp() {
         reset={resetConnect}
         isPending={isConnectPending}
         targetChainId={selectedNetwork.chainId as SupportedChainId}
-        isLinking={isWalletLinking}
       />
       <AdModal
         isOpen={showAdModal}

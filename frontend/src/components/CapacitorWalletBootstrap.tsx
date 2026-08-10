@@ -39,6 +39,7 @@ export function CapacitorWalletBootstrap() {
   const { status } = useAccount();
   const statusRef = useRef(status);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectInFlightRef = useRef(false);
 
   statusRef.current = status;
 
@@ -50,6 +51,16 @@ export function CapacitorWalletBootstrap() {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
+    };
+
+    const triggerReconnect = () => {
+      if (reconnectInFlightRef.current) return;
+      reconnectInFlightRef.current = true;
+      reconnect(undefined, {
+        onSettled: () => {
+          reconnectInFlightRef.current = false;
+        },
+      });
     };
 
     const startPoll = () => {
@@ -76,7 +87,7 @@ export function CapacitorWalletBootstrap() {
         }
 
         if (isWalletLinkingFlag()) {
-          reconnect();
+          triggerReconnect();
         }
         if (attempts >= 40) stopPoll();
       }, 500);
@@ -101,7 +112,7 @@ export function CapacitorWalletBootstrap() {
         startPoll();
         return;
       }
-      reconnect();
+      triggerReconnect();
       startPoll();
     };
 
@@ -130,6 +141,7 @@ export function CapacitorWalletBootstrap() {
 
     return () => {
       stopPoll();
+      reconnectInFlightRef.current = false;
       document.removeEventListener('visibilitychange', onVisible);
       removeAppListener?.();
     };
