@@ -3,6 +3,16 @@ import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 
 const METAMASK_ID = 'metaMaskSDK';
 const INJECTED_ID = 'injected';
+const METAMASK_SDK_STORAGE_KEYS = [
+  '.sdk-comm',
+  '.MMSDK_cached_address',
+  '.MMSDK_cached_chainId',
+  'providerType',
+] as const;
+
+function finishAfter(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
 
 /**
  * Capacitor WebView·모바일 브라우저 등 `window.ethereum` 주입이 없는 환경.
@@ -26,6 +36,28 @@ export function getCapacitorPreferredConnector(
 ): Connector | undefined {
   if (!isCapacitorNativeApp()) return undefined;
   return connectors.find(c => c.id === METAMASK_ID);
+}
+
+/**
+ * 이전 연결 시도에서 남은 MetaMask SDK 소켓·암호화 채널을 정리한다.
+ * wagmi reset()은 mutation 상태만 초기화하므로 SDK terminate()와 저장소 정리가 별도로 필요하다.
+ */
+export async function resetCapacitorMetaMaskSession(connector: Connector): Promise<void> {
+  if (!isCapacitorNativeApp() || connector.id !== METAMASK_ID) return;
+
+  try {
+    await Promise.race([connector.disconnect(), finishAfter(2000)]);
+  } catch {
+    // 연결되지 않았거나 이미 만료된 세션도 아래 저장소 정리는 계속한다.
+  }
+
+  try {
+    for (const key of METAMASK_SDK_STORAGE_KEYS) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // WebView 저장소 접근 실패는 새 연결 시도를 막지 않는다.
+  }
 }
 
 export function filterConnectorsForEnvironment(connectors: readonly Connector[]): readonly Connector[] {

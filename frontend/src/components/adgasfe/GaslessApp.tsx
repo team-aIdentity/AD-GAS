@@ -33,7 +33,10 @@ import { MobileTransferForm } from './mobile/MobileTransferForm';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useGoogleRewardedAd } from '@/hooks/useGoogleRewardedAd';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
-import { getCapacitorPreferredConnector } from '@/lib/walletConnectEnvironment';
+import {
+  getCapacitorPreferredConnector,
+  resetCapacitorMetaMaskSession,
+} from '@/lib/walletConnectEnvironment';
 import { getRelayerApiBase } from '@/lib/relayerApiBase';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
 import {
@@ -334,34 +337,41 @@ export function GaslessApp() {
     }
 
     requestAnimationFrame(() => {
-      connect(
-        { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
-        {
-          onSuccess: () => {
-            void ensureWalletOnChain(DEFAULT_NETWORK.chainId as SupportedChainId)
-              .catch(() => {
-                toast.error(t('toast.networkSwitchFailed'));
-              })
-              .finally(() => {
-                walletLinkingRef.current = false;
-                setIsWalletLinking(false);
-                setWalletLinkingFlag(false);
-                setShowConnectModal(false);
-              });
+      void resetCapacitorMetaMaskSession(preferred).then(() => {
+        if (!walletLinkingRef.current) return;
+
+        connect(
+          {
+            connector: preferred,
+            chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56,
           },
-          onError: err => {
-            walletLinkingRef.current = false;
-            setIsWalletLinking(false);
-            setWalletLinkingFlag(false);
-            resetConnect();
-            const msg =
-              (err as { shortMessage?: string })?.shortMessage ??
-              (err as Error)?.message ??
-              t('errors.generic');
-            toast.error(msg);
-          },
-        }
-      );
+          {
+            onSuccess: () => {
+              void ensureWalletOnChain(DEFAULT_NETWORK.chainId as SupportedChainId)
+                .catch(() => {
+                  toast.error(t('toast.networkSwitchFailed'));
+                })
+                .finally(() => {
+                  walletLinkingRef.current = false;
+                  setIsWalletLinking(false);
+                  setWalletLinkingFlag(false);
+                  setShowConnectModal(false);
+                });
+            },
+            onError: err => {
+              walletLinkingRef.current = false;
+              setIsWalletLinking(false);
+              setWalletLinkingFlag(false);
+              resetConnect();
+              const msg =
+                (err as { shortMessage?: string })?.shortMessage ??
+                (err as Error)?.message ??
+                t('errors.generic');
+              toast.error(msg);
+            },
+          }
+        );
+      });
     });
   }, [connect, connectors, resetConnect, t]);
 

@@ -30,6 +30,9 @@ export const config = createConfig({
         name: 'AD GAS',
         url: dappMetadataUrl,
       },
+      // Capacitor WebView에서 만료된 SDK 채널을 재사용하면 MetaMask가
+      // "연결 중" 화면에 머물 수 있으므로 채널은 앱 실행마다 새로 만든다.
+      storage: { enabled: false },
       preferDesktop: false,
       useDeeplink: metamaskUseDeeplink,
       openDeeplink: openMetaMaskDeeplink,

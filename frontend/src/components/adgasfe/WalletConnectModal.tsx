@@ -10,6 +10,7 @@ import { useLocale } from '@/contexts/LocaleContext';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import {
   orderConnectorsForEnvironment,
+  resetCapacitorMetaMaskSession,
 } from '@/lib/walletConnectEnvironment';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
 import { DEFAULT_NETWORK } from '@/lib/networks';
@@ -52,8 +53,9 @@ export function WalletConnectModal({
     return c.name;
   };
 
-  const startConnect = (connector: Connector) => {
+  const startConnect = async (connector: Connector) => {
     if (nativeApp) setWalletLinkingFlag(true);
+    await resetCapacitorMetaMaskSession(connector);
     connect(
       { connector, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
       {
@@ -114,7 +116,7 @@ export function WalletConnectModal({
                   key={connector.uid}
                   type="button"
                   disabled={isPending}
-                  onClick={() => startConnect(connector)}
+                  onClick={() => void startConnect(connector)}
                   className="w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] px-4 py-3 text-left font-medium text-white transition-colors hover:bg-[rgba(99,102,241,0.13)] disabled:opacity-50"
                 >
                   {connectorLabel(connector)}
