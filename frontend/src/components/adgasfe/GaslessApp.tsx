@@ -49,6 +49,7 @@ import {
   isWalletKnownOnChain,
   isWalletSwitchRejectedError,
   readProviderChainId,
+  verifyWalletOnChain,
   type SupportedChainId,
 } from '@/lib/ensureWalletChain';
 import { writeContract } from '@wagmi/core';
@@ -353,7 +354,7 @@ export function GaslessApp() {
 
     try {
       setTxStatusMessage(t('txModal.checkingNetwork'));
-      await ensureWalletOnChain(targetChainId);
+      await verifyWalletOnChain(targetChainId);
 
       setTxStatusMessage(t('txModal.preparingWallet'));
       const clients = await ensureWagmiClients({
@@ -727,8 +728,7 @@ export function GaslessApp() {
       ? toast.loading(`${targetNetwork.name} 네트워크 확인 중...`)
       : undefined;
     try {
-      if (needsNetworkCheck && isCapacitorNativeApp()) setWalletLinkingFlag(true);
-      await ensureWalletOnChain(targetChainId);
+      await verifyWalletOnChain(targetChainId);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : t('toast.networkSwitchFailed');
@@ -736,7 +736,6 @@ export function GaslessApp() {
       return;
     } finally {
       if (networkToastId != null) toast.dismiss(networkToastId);
-      if (needsNetworkCheck && isCapacitorNativeApp()) setWalletLinkingFlag(false);
       if (needsNetworkCheck) setIsPreparingSend(false);
     }
 

@@ -6,7 +6,7 @@ import {
   setWalletLinkingFlag,
   setTxSigningInProgress,
 } from '@/components/CapacitorWalletBootstrap';
-import { ensureWalletOnChain, type SupportedChainId } from '@/lib/ensureWalletChain';
+import { type SupportedChainId, verifyWalletOnChain } from '@/lib/ensureWalletChain';
 
 export function beginWalletTxSigning(): void {
   setTxSigningInProgress(true);
@@ -80,7 +80,7 @@ export async function signTypedDataForTx<
   }
 
   if (chainId != null) {
-    await ensureWalletOnChain(chainId);
+    await verifyWalletOnChain(chainId);
   }
 
   if (isCapacitorNativeApp()) {

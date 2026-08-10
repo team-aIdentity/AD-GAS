@@ -25,24 +25,31 @@ function withTimeout<T>(promise: Promise<T>, maxMs: number, message: string): Pr
 
 type Eip1193Provider = {
   request?: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
+  removeListener?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
 };
 
 type CachedProvider = {
   connectorUid: string;
   provider: Eip1193Provider;
+  chainChangedListener?: (chainId: string) => void;
 };
 
 type VerifiedChain = {
   connectorUid: string;
   chainId: number;
-  verifiedAt: number;
 };
 
-const VERIFIED_CHAIN_TTL_MS = 60_000;
 let cachedProvider: CachedProvider | null = null;
 let verifiedChain: VerifiedChain | null = null;
 
 export function clearWalletChainCache(): void {
+  if (cachedProvider?.chainChangedListener) {
+    cachedProvider.provider.removeListener?.(
+      'chainChanged',
+      cachedProvider.chainChangedListener
+    );
+  }
   cachedProvider = null;
   verifiedChain = null;
 }
@@ -50,7 +57,7 @@ export function clearWalletChainCache(): void {
 function markWalletChainVerified(targetChainId: SupportedChainId): void {
   const connectorUid = getAccount(config).connector?.uid;
   if (!connectorUid) return;
-  verifiedChain = { connectorUid, chainId: targetChainId, verifiedAt: Date.now() };
+  verifiedChain = { connectorUid, chainId: targetChainId };
 }
 
 const CHAIN_PARAMS: Record<
@@ -109,28 +116,54 @@ async function getConnectedProvider(): Promise<Eip1193Provider | null> {
     );
     if (!provider || typeof provider !== 'object') return null;
     const connectedProvider = provider as Eip1193Provider;
-    cachedProvider = { connectorUid: connector.uid, provider: connectedProvider };
+    if (cachedProvider?.chainChangedListener) {
+      cachedProvider.provider.removeListener?.(
+        'chainChanged',
+        cachedProvider.chainChangedListener
+      );
+    }
+    const chainChangedListener = (hexChainId: string) => {
+      const nextChainId = Number.parseInt(hexChainId, 16);
+      if (!Number.isFinite(nextChainId)) return;
+      verifiedChain = {
+        connectorUid: connector.uid,
+        chainId: nextChainId,
+      };
+    };
+    const registeredChainListener = connectedProvider.on
+      ? chainChangedListener
+      : undefined;
+    connectedProvider.on?.('chainChanged', chainChangedListener);
+    cachedProvider = {
+      connectorUid: connector.uid,
+      provider: connectedProvider,
+      chainChangedListener: registeredChainListener,
+    };
     return connectedProvider;
   } catch {
     return null;
   }
 }
 
-/** 최근 provider 확인값 또는 Wagmi 연결 상태가 target과 같으면 즉시 통과한다. */
+/** provider 확인값 또는 Wagmi 연결 상태가 target과 같으면 즉시 통과한다. */
 export function isWalletKnownOnChain(targetChainId: SupportedChainId): boolean {
   const account = getAccount(config);
   const connectorUid = account.connector?.uid;
-  if (!connectorUid || account.status !== 'connected') return false;
+  if (!connectorUid) return false;
 
   if (
     verifiedChain?.connectorUid === connectorUid &&
-    verifiedChain.chainId === targetChainId &&
-    Date.now() - verifiedChain.verifiedAt < VERIFIED_CHAIN_TTL_MS
+    verifiedChain.chainId === targetChainId
   ) {
-    return true;
+    // 이벤트 구독이 가능한 provider는 수동 체인 변경 시 verifiedChain을 갱신한다.
+    // 이벤트가 없는 fallback connector는 Wagmi의 현재 chainId도 함께 확인한다.
+    const observesChainChanges =
+      cachedProvider?.connectorUid === connectorUid &&
+      cachedProvider.chainChangedListener != null;
+    if (observesChainChanges) return true;
   }
 
-  return account.chainId === targetChainId;
+  return account.status === 'connected' && account.chainId === targetChainId;
 }
 
 /** MetaMask provider의 실제 eth_chainId (wagmi 캐시와 다를 수 있음) */
@@ -148,12 +181,32 @@ export async function readProviderChainId(): Promise<number | null> {
     const chainId = typeof hex === 'string' ? Number.parseInt(hex, 16) : null;
     const connectorUid = getAccount(config).connector?.uid;
     if (chainId != null && connectorUid) {
-      verifiedChain = { connectorUid, chainId, verifiedAt: Date.now() };
+      verifiedChain = { connectorUid, chainId };
     }
     return chainId;
   } catch {
     return null;
   }
+}
+
+/**
+ * 전송·서명 단계용: 실제 체인을 확인만 하고 전환 요청은 절대 보내지 않는다.
+ * 네트워크 전환은 사용자가 네트워크 카드를 선택한 시점에만 수행한다.
+ */
+export async function verifyWalletOnChain(
+  targetChainId: SupportedChainId
+): Promise<void> {
+  if (isWalletKnownOnChain(targetChainId)) return;
+
+  const current = await readProviderChainId();
+  if (current === targetChainId) return;
+
+  const targetName = CHAIN_PARAMS[targetChainId].chainName;
+  throw new Error(
+    current == null
+      ? `${targetName} 네트워크 상태를 확인하지 못했습니다. 네트워크를 다시 선택해주세요.`
+      : `현재 지갑 네트워크가 ${targetName}이(가) 아닙니다. 네트워크를 다시 선택해주세요.`
+  );
 }
 
 export function getWalletErrorCode(err: unknown): number | undefined {
@@ -228,8 +281,8 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
 }
 
 /**
- * 지갑 provider 체인이 target과 다르면 wallet_switchEthereumChain 요청.
- * MetaMask가 Base Sepolia(84532) 등 다른 체인에 있을 때 서명 전에 호출.
+ * 네트워크 카드 선택·최초 지갑 연결 시에만 wallet_switchEthereumChain 요청.
+ * 전송·서명 단계에서는 verifyWalletOnChain을 사용해 중복 전환을 금지한다.
  */
 export async function ensureWalletOnChain(targetChainId: SupportedChainId): Promise<void> {
   if (isWalletKnownOnChain(targetChainId)) return;
