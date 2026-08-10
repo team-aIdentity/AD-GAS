@@ -7,10 +7,6 @@ import { giwaSepolia } from '@/lib/chains/giwaSepolia';
 
 export type SupportedChainId = 8453 | 91342 | 43114 | 56;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 function withTimeout<T>(promise: Promise<T>, maxMs: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutId = window.setTimeout(() => reject(new Error(message)), maxMs);
@@ -29,8 +25,6 @@ function withTimeout<T>(promise: Promise<T>, maxMs: number, message: string): Pr
 
 type Eip1193Provider = {
   request?: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  on?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
-  removeListener?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
 };
 
 type CachedProvider = {
@@ -51,6 +45,12 @@ let verifiedChain: VerifiedChain | null = null;
 export function clearWalletChainCache(): void {
   cachedProvider = null;
   verifiedChain = null;
+}
+
+function markWalletChainVerified(targetChainId: SupportedChainId): void {
+  const connectorUid = getAccount(config).connector?.uid;
+  if (!connectorUid) return;
+  verifiedChain = { connectorUid, chainId: targetChainId, verifiedAt: Date.now() };
 }
 
 const CHAIN_PARAMS: Record<
@@ -156,42 +156,28 @@ export async function readProviderChainId(): Promise<number | null> {
   }
 }
 
-async function waitForProviderChain(
-  targetChainId: SupportedChainId,
-  maxMs = 12000
-): Promise<boolean> {
-  const provider = await getConnectedProvider();
-  const targetHex = CHAIN_PARAMS[targetChainId].chainId.toLowerCase();
-  let chainChanged = false;
-
-  const listener = (hex: string) => {
-    if (hex.toLowerCase() !== targetHex) return;
-    chainChanged = true;
-    const connectorUid = getAccount(config).connector?.uid;
-    if (connectorUid) {
-      verifiedChain = { connectorUid, chainId: targetChainId, verifiedAt: Date.now() };
-    }
+export function getWalletErrorCode(err: unknown): number | undefined {
+  const error = err as {
+    code?: number | string;
+    cause?: { code?: number | string };
+    data?: { originalError?: { code?: number | string } };
   };
-
-  provider?.on?.('chainChanged', listener);
-  const start = Date.now();
-  try {
-    while (Date.now() - start < maxMs) {
-      if (chainChanged) return true;
-      if (isWalletKnownOnChain(targetChainId)) return true;
-      const current = await readProviderChainId();
-      if (current === targetChainId) return true;
-      await sleep(250);
-    }
-    return false;
-  } finally {
-    provider?.removeListener?.('chainChanged', listener);
+  const code = error.code ?? error.cause?.code ?? error.data?.originalError?.code;
+  if (typeof code === 'number') return code;
+  if (typeof code === 'string' && code.trim() !== '') {
+    const parsed = Number(code);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
+  return undefined;
 }
 
-function getWalletErrorCode(err: unknown): number | undefined {
-  const error = err as { code?: number; cause?: { code?: number }; data?: { originalError?: { code?: number } } };
-  return error.code ?? error.cause?.code ?? error.data?.originalError?.code;
+export function isWalletSwitchRejectedError(err: unknown): boolean {
+  if (getWalletErrorCode(err) === 4001) return true;
+  const message =
+    (err as { shortMessage?: string })?.shortMessage ??
+    (err as Error)?.message ??
+    '';
+  return /user rejected|user denied|request rejected|사용자.*거절|요청.*거절/i.test(message);
 }
 
 async function switchWithProvider(targetChainId: SupportedChainId): Promise<void> {
@@ -203,6 +189,7 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
       20000,
       `${CHAIN_PARAMS[targetChainId].chainName} 네트워크 전환 요청 시간이 초과되었습니다. 지갑 확장 프로그램을 다시 연결해주세요.`
     );
+    markWalletChainVerified(targetChainId);
     return;
   }
 
@@ -216,6 +203,7 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
       20000,
       `${chain.chainName} 네트워크 전환 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
     );
+    markWalletChainVerified(targetChainId);
   } catch (err) {
     if (getWalletErrorCode(err) !== 4902) throw err;
 
@@ -235,6 +223,7 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
       20000,
       `${chain.chainName} 네트워크 전환 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
     );
+    markWalletChainVerified(targetChainId);
   }
 }
 
@@ -245,8 +234,13 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
 export async function ensureWalletOnChain(targetChainId: SupportedChainId): Promise<void> {
   if (isWalletKnownOnChain(targetChainId)) return;
 
-  const current = await readProviderChainId();
-  if (current === targetChainId) return;
+  // Wagmi가 현재 체인을 이미 알고 있으면 별도의 eth_chainId 왕복 없이 바로
+  // 전환 요청한다. MetaMask SDK가 응답하지 않을 때 생기던 선행 5초 대기를 없앤다.
+  const accountChainId = getAccount(config).chainId;
+  if (accountChainId == null) {
+    const current = await readProviderChainId();
+    if (current === targetChainId) return;
+  }
 
   const useLinking = isCapacitorNativeApp();
   if (useLinking) setWalletLinkingFlag(true);
@@ -258,17 +252,13 @@ export async function ensureWalletOnChain(targetChainId: SupportedChainId): Prom
       (err as { shortMessage?: string })?.shortMessage ??
       (err as Error)?.message ??
       '네트워크 전환에 실패했습니다.';
-    throw new Error(msg);
+    const wrapped = new Error(msg) as Error & { code?: number };
+    wrapped.code = getWalletErrorCode(err);
+    throw wrapped;
   }
 
-  const matched = await waitForProviderChain(targetChainId);
-  if (!matched) {
-    const after = await readProviderChainId();
-    const targetName = CHAIN_PARAMS[targetChainId].chainName;
-    throw new Error(
-      after != null
-        ? `MetaMask에서 ${targetName} 네트워크 전환을 승인해주세요. (현재 chainId: ${after})`
-        : `MetaMask에서 ${targetName} 네트워크 전환을 승인해주세요.`
-    );
-  }
+  // EIP-1193 전환 요청이 resolve됐다는 것은 지갑이 전환을 승인했다는 뜻이다.
+  // MetaMask SDK는 앱 복귀 직후 eth_chainId/chainChanged 반영이 늦을 수 있으므로,
+  // 여기서 다시 polling하며 성공한 전환을 실패로 되돌리지 않는다.
+  markWalletChainVerified(targetChainId);
 }

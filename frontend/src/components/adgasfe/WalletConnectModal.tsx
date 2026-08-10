@@ -13,7 +13,11 @@ import {
   orderConnectorsForEnvironment,
 } from '@/lib/walletConnectEnvironment';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
-import { ensureWalletOnChain, type SupportedChainId } from '@/lib/ensureWalletChain';
+import {
+  ensureWalletOnChain,
+  isWalletSwitchRejectedError,
+  type SupportedChainId,
+} from '@/lib/ensureWalletChain';
 
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
 
@@ -71,8 +75,14 @@ export function WalletConnectModal({
   const finishConnected = async () => {
     try {
       await ensureWalletOnChain(targetChainId);
-    } catch {
-      toast.error(t('toast.networkSwitchFailed'));
+    } catch (error) {
+      toast.error(
+        isWalletSwitchRejectedError(error)
+          ? t('toast.networkSwitchRejectedGeneric')
+          : error instanceof Error && error.message
+            ? error.message
+            : t('toast.networkSwitchFailed')
+      );
     } finally {
       startingRef.current = false;
       setIsStarting(false);

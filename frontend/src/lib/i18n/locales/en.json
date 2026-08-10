@@ -94,6 +94,8 @@
   "errors.unknown": "An unknown error occurred.",
   "toast.walletDisconnected": "Wallet disconnected",
   "toast.networkSwitched": "Switched to {{name}} network",
+  "toast.networkSwitchRejected": "The switch to {{name}} was cancelled in MetaMask",
+  "toast.networkSwitchRejectedGeneric": "The network switch was cancelled in MetaMask",
   "toast.networkSwitchFailed": "Failed to switch network",
   "toast.connectFirst": "Please connect your wallet first",
   "toast.fillAll": "Please fill in all fields",

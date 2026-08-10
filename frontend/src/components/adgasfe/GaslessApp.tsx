@@ -47,6 +47,7 @@ import {
   clearWalletChainCache,
   ensureWalletOnChain,
   isWalletKnownOnChain,
+  isWalletSwitchRejectedError,
   readProviderChainId,
   type SupportedChainId,
 } from '@/lib/ensureWalletChain';
@@ -296,10 +297,13 @@ export function GaslessApp() {
         toast.info(`${network.name} 네트워크로 전환해 주세요.`);
         await ensureWalletOnChain(targetChainId);
         toast.success(t('toast.networkSwitched', { name: network.name }));
-      } catch {
+      } catch (error) {
         // wagmi의 chainId는 모바일 복귀 직후 이전 Base 값을 잠시 유지할 수 있다.
         // provider를 직접 확인해 실제 전환이 끝났다면 GIWA 선택을 유지한다.
-        const providerChainId = await readProviderChainId();
+        const rejected = isWalletSwitchRejectedError(error);
+        const providerChainId = rejected && chainId != null
+          ? chainId
+          : await readProviderChainId();
         if (providerChainId === targetChainId) {
           selectedNetworkRef.current = network;
           setSelectedNetwork(network);
@@ -313,7 +317,13 @@ export function GaslessApp() {
           networkIntentChainIdRef.current = actual.chainId as SupportedChainId;
           setSelectedNetwork(actual);
         }
-        toast.error(t('toast.networkSwitchFailed'));
+        toast.error(
+          rejected
+            ? t('toast.networkSwitchRejected', { name: network.name })
+            : error instanceof Error && error.message
+              ? error.message
+              : t('toast.networkSwitchFailed')
+        );
       } finally {
         if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
       }
