@@ -18,11 +18,39 @@ export function endWalletTxSigning(): void {
   setWalletLinkingFlag(false);
 }
 
-/** MetaMask 복귀 직후 다음 서명 딥링크가 바로 열리도록 1~2 프레임만 양보 */
-function yieldToMain(): Promise<void> {
-  return new Promise(resolve => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+/** 이전 지갑 요청에서 앱으로 돌아온 뒤 WebView와 MetaMask SDK 채널이 복구될 때까지 대기 */
+async function waitForNativeWalletReturn(maxMs = 5000): Promise<void> {
+  try {
+    const { App } = await import('@capacitor/app');
+    const state = await App.getState();
+    if (!state.isActive) {
+      await new Promise<void>(resolve => {
+        let listener: { remove: () => Promise<void> } | undefined;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          void listener?.remove();
+          resolve();
+        };
+        const timer = window.setTimeout(finish, maxMs);
+        void App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) finish();
+        }).then(handle => {
+          listener = handle;
+          if (settled) void handle.remove();
+        });
+      });
+    }
+    await sleep(700);
+  } catch {
+    await sleep(900);
+  }
 }
 
 function resolveChainId(domain?: { chainId?: number | bigint }): SupportedChainId | undefined {
@@ -46,15 +74,17 @@ export async function signTypedDataForTx<
   const chainId = resolveChainId(
     parameters.domain as { chainId?: number | bigint } | undefined
   );
+
+  if (isCapacitorNativeApp() && options?.immediateAfterWalletReturn) {
+    await waitForNativeWalletReturn();
+  }
+
   if (chainId != null) {
     await ensureWalletOnChain(chainId);
   }
 
   if (isCapacitorNativeApp()) {
     setWalletLinkingFlag(true);
-    if (options?.immediateAfterWalletReturn) {
-      await yieldToMain();
-    }
   }
 
   return wagmiSignTypedData(wagmiConfig, parameters);
