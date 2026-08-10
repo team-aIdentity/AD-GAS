@@ -33,6 +33,26 @@ type Eip1193Provider = {
   removeListener?: (event: 'chainChanged', listener: (chainId: string) => void) => void;
 };
 
+type CachedProvider = {
+  connectorUid: string;
+  provider: Eip1193Provider;
+};
+
+type VerifiedChain = {
+  connectorUid: string;
+  chainId: number;
+  verifiedAt: number;
+};
+
+const VERIFIED_CHAIN_TTL_MS = 60_000;
+let cachedProvider: CachedProvider | null = null;
+let verifiedChain: VerifiedChain | null = null;
+
+export function clearWalletChainCache(): void {
+  cachedProvider = null;
+  verifiedChain = null;
+}
+
 const CHAIN_PARAMS: Record<
   SupportedChainId,
   {
@@ -77,6 +97,10 @@ async function getConnectedProvider(): Promise<Eip1193Provider | null> {
   const { connector } = getAccount(config);
   if (!connector) return null;
 
+  if (cachedProvider?.connectorUid === connector.uid) {
+    return cachedProvider.provider;
+  }
+
   try {
     const provider = await withTimeout(
       connector.getProvider(),
@@ -84,10 +108,29 @@ async function getConnectedProvider(): Promise<Eip1193Provider | null> {
       '지갑 연결 응답이 지연되고 있습니다. 지갑을 다시 연결해주세요.'
     );
     if (!provider || typeof provider !== 'object') return null;
-    return provider as Eip1193Provider;
+    const connectedProvider = provider as Eip1193Provider;
+    cachedProvider = { connectorUid: connector.uid, provider: connectedProvider };
+    return connectedProvider;
   } catch {
     return null;
   }
+}
+
+/** 최근 provider 확인값 또는 Wagmi 연결 상태가 target과 같으면 즉시 통과한다. */
+export function isWalletKnownOnChain(targetChainId: SupportedChainId): boolean {
+  const account = getAccount(config);
+  const connectorUid = account.connector?.uid;
+  if (!connectorUid || account.status !== 'connected') return false;
+
+  if (
+    verifiedChain?.connectorUid === connectorUid &&
+    verifiedChain.chainId === targetChainId &&
+    Date.now() - verifiedChain.verifiedAt < VERIFIED_CHAIN_TTL_MS
+  ) {
+    return true;
+  }
+
+  return account.chainId === targetChainId;
 }
 
 /** MetaMask provider의 실제 eth_chainId (wagmi 캐시와 다를 수 있음) */
@@ -102,7 +145,12 @@ export async function readProviderChainId(): Promise<number | null> {
       5000,
       '지갑 네트워크 확인 시간이 초과되었습니다.'
     );
-    return typeof hex === 'string' ? Number.parseInt(hex, 16) : null;
+    const chainId = typeof hex === 'string' ? Number.parseInt(hex, 16) : null;
+    const connectorUid = getAccount(config).connector?.uid;
+    if (chainId != null && connectorUid) {
+      verifiedChain = { connectorUid, chainId, verifiedAt: Date.now() };
+    }
+    return chainId;
   } catch {
     return null;
   }
@@ -117,7 +165,12 @@ async function waitForProviderChain(
   let chainChanged = false;
 
   const listener = (hex: string) => {
-    if (hex.toLowerCase() === targetHex) chainChanged = true;
+    if (hex.toLowerCase() !== targetHex) return;
+    chainChanged = true;
+    const connectorUid = getAccount(config).connector?.uid;
+    if (connectorUid) {
+      verifiedChain = { connectorUid, chainId: targetChainId, verifiedAt: Date.now() };
+    }
   };
 
   provider?.on?.('chainChanged', listener);
@@ -125,6 +178,7 @@ async function waitForProviderChain(
   try {
     while (Date.now() - start < maxMs) {
       if (chainChanged) return true;
+      if (isWalletKnownOnChain(targetChainId)) return true;
       const current = await readProviderChainId();
       if (current === targetChainId) return true;
       await sleep(250);
@@ -189,6 +243,8 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
  * MetaMask가 Base Sepolia(84532) 등 다른 체인에 있을 때 서명 전에 호출.
  */
 export async function ensureWalletOnChain(targetChainId: SupportedChainId): Promise<void> {
+  if (isWalletKnownOnChain(targetChainId)) return;
+
   const current = await readProviderChainId();
   if (current === targetChainId) return;
 

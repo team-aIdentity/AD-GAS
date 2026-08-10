@@ -44,7 +44,9 @@ import {
   signTypedDataForTx,
 } from '@/lib/walletSigning';
 import {
+  clearWalletChainCache,
   ensureWalletOnChain,
+  isWalletKnownOnChain,
   readProviderChainId,
   type SupportedChainId,
 } from '@/lib/ensureWalletChain';
@@ -262,6 +264,7 @@ export function GaslessApp() {
 
   const handleDisconnect = useCallback(() => {
     disconnect();
+    clearWalletChainCache();
     setShowConnectModal(false);
     setRecipientAddress('');
     setAmount('0.0001');
@@ -708,10 +711,13 @@ export function GaslessApp() {
     const targetChainId = targetNetwork.chainId as SupportedChainId;
     const targetToken = selectedToken;
     networkIntentChainIdRef.current = targetChainId;
-    setIsPreparingSend(true);
-    const networkToastId = toast.loading(`${targetNetwork.name} 네트워크 확인 중...`);
+    const needsNetworkCheck = !isWalletKnownOnChain(targetChainId);
+    if (needsNetworkCheck) setIsPreparingSend(true);
+    const networkToastId = needsNetworkCheck
+      ? toast.loading(`${targetNetwork.name} 네트워크 확인 중...`)
+      : undefined;
     try {
-      if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
+      if (needsNetworkCheck && isCapacitorNativeApp()) setWalletLinkingFlag(true);
       await ensureWalletOnChain(targetChainId);
     } catch (err) {
       const msg =
@@ -719,9 +725,9 @@ export function GaslessApp() {
       toast.error(msg);
       return;
     } finally {
-      toast.dismiss(networkToastId);
-      if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
-      setIsPreparingSend(false);
+      if (networkToastId != null) toast.dismiss(networkToastId);
+      if (needsNetworkCheck && isCapacitorNativeApp()) setWalletLinkingFlag(false);
+      if (needsNetworkCheck) setIsPreparingSend(false);
     }
 
     setUserError(null);
