@@ -52,6 +52,7 @@ import {
 import { writeContract } from '@wagmi/core';
 import { config as wagmiConfig } from '@/wagmi.config';
 import { ensureWagmiClients } from '@/lib/ensureWagmiClients';
+import { getSponsoredTransferContractAddress } from '@/lib/sponsoredTransferContracts';
 
 const DAILY_LIMIT = 10;
 
@@ -256,25 +257,6 @@ export function GaslessApp() {
   }, [availableTokens, tokenChainId]);
 
   const walletShort = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '';
-
-  // 컨트랙트 주소 조회 (체인별)
-  const getContractAddress = useCallback((): `0x${string}` | undefined => {
-    if (!chainId) return undefined;
-    switch (chainId) {
-      case 8453:
-        return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE as `0x${string}`;
-      case 43114:
-        return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE as `0x${string}`;
-      case 56:
-        return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB as `0x${string}`;
-      case 91342:
-        return process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA as `0x${string}`;
-      default:
-        return undefined;
-    }
-  }, [chainId]);
-
-  const contractAddress = getContractAddress();
 
   useEffect(() => {
     if (isConnected && isWalletLinking) {
@@ -489,24 +471,7 @@ export function GaslessApp() {
       const signingConnector = getCapacitorPreferredConnector(wagmiConfig.connectors);
       setTxStatusMessage(t('txModal.preparingTransfer'));
 
-      // 컨트랙트 주소 조회 (체인별 환경 변수)
-      let contractAddress: `0x${string}` | undefined;
-      switch (targetChainId) {
-        case 8453:
-          contractAddress = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BASE as `0x${string}`;
-          break;
-        case 43114:
-          contractAddress = process.env
-            .NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_AVALANCHE as `0x${string}`;
-          break;
-        case 56:
-          contractAddress = process.env.NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_BNB as `0x${string}`;
-          break;
-        case 91342:
-          contractAddress = process.env
-            .NEXT_PUBLIC_ADWALLET_CONTRACT_ADDR_GIWA_SEPOLIA as `0x${string}`;
-          break;
-      }
+      const contractAddress = getSponsoredTransferContractAddress(targetChainId);
       if (!contractAddress) {
         setIsTransacting(false);
         setShowTransactionModal(false);
