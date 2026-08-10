@@ -13,7 +13,7 @@ import {
   resetCapacitorMetaMaskSession,
 } from '@/lib/walletConnectEnvironment';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
-import { DEFAULT_NETWORK } from '@/lib/networks';
+import type { SupportedChainId } from '@/lib/ensureWalletChain';
 
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
 
@@ -24,6 +24,7 @@ interface WalletConnectModalProps {
   connect: ConnectFn;
   reset: () => void;
   isPending: boolean;
+  targetChainId: SupportedChainId;
   /** Capacitor: connect() 호출 직후 isPending 전에도 로딩 UI 표시 */
   isLinking?: boolean;
 }
@@ -38,6 +39,7 @@ export function WalletConnectModal({
   connect,
   reset,
   isPending,
+  targetChainId,
   isLinking = false,
 }: WalletConnectModalProps) {
   const { t } = useLocale();
@@ -57,7 +59,7 @@ export function WalletConnectModal({
     if (nativeApp) setWalletLinkingFlag(true);
     await resetCapacitorMetaMaskSession(connector);
     connect(
-      { connector, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
+      { connector, chainId: targetChainId },
       {
         onSuccess: () => {
           setWalletLinkingFlag(false);
