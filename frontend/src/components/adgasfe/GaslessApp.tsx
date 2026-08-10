@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import {
   useAccount,
   useConnect,
@@ -318,8 +319,51 @@ export function GaslessApp() {
   }, [connect, connectors, accountStatus]);
 
   const handleConnect = useCallback(() => {
-    setShowConnectModal(true);
-  }, []);
+    resetConnect();
+    walletLinkingRef.current = true;
+    setIsWalletLinking(true);
+    if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
+    flushSync(() => setShowConnectModal(true));
+
+    const preferred = getCapacitorPreferredConnector(connectors);
+    if (!preferred) {
+      walletLinkingRef.current = false;
+      setIsWalletLinking(false);
+      setWalletLinkingFlag(false);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      connect(
+        { connector: preferred, chainId: DEFAULT_NETWORK.chainId as 8453 | 91342 | 43114 | 56 },
+        {
+          onSuccess: () => {
+            void ensureWalletOnChain(DEFAULT_NETWORK.chainId as SupportedChainId)
+              .catch(() => {
+                toast.error(t('toast.networkSwitchFailed'));
+              })
+              .finally(() => {
+                walletLinkingRef.current = false;
+                setIsWalletLinking(false);
+                setWalletLinkingFlag(false);
+                setShowConnectModal(false);
+              });
+          },
+          onError: err => {
+            walletLinkingRef.current = false;
+            setIsWalletLinking(false);
+            setWalletLinkingFlag(false);
+            resetConnect();
+            const msg =
+              (err as { shortMessage?: string })?.shortMessage ??
+              (err as Error)?.message ??
+              t('errors.generic');
+            toast.error(msg);
+          },
+        }
+      );
+    });
+  }, [connect, connectors, resetConnect, t]);
 
   const handleDisconnect = useCallback(() => {
     disconnect();

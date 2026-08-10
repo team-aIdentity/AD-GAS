@@ -9,8 +9,6 @@ import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import {
-  getCapacitorPreferredConnector,
-  isWalletConnectProjectConfigured,
   orderConnectorsForEnvironment,
 } from '@/lib/walletConnectEnvironment';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
@@ -47,15 +45,8 @@ export function WalletConnectModal({
     () => orderConnectorsForEnvironment(connectors),
     [connectors]
   );
-  const preferredNative = useMemo(
-    () => getCapacitorPreferredConnector(connectors),
-    [connectors]
-  );
-  const wcOk = isWalletConnectProjectConfigured();
-  const showWcSetupWarning = nativeApp && !wcOk && !preferredNative;
-
   const connectorLabel = (c: Connector) => {
-    if (c.id === 'metaMaskSDK' || (c.id === 'walletConnect' && nativeApp)) {
+    if (c.id === 'metaMaskSDK') {
       return t('walletConnect.metamaskViaWc');
     }
     return c.name;
@@ -100,10 +91,6 @@ export function WalletConnectModal({
     >
       <div className="w-full max-w-md rounded-3xl border border-[rgba(255,255,255,0.08)] bg-[#1e293b] p-6">
         <h2 className="mb-4 text-xl font-extrabold text-white">{t('connectWallet')}</h2>
-
-        {showWcSetupWarning && (
-          <p className="mb-3 text-sm text-amber-200/90">{t('walletConnect.capacitorRequiresWcProjectId')}</p>
-        )}
 
         {nativeConnecting ? (
           <div className="flex flex-col items-center gap-4 py-6 text-center">
