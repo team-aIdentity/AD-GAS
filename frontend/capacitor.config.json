@@ -1,0 +1,13 @@
+{
+  "appId": "com.adgas.app",
+  "appName": "AD-GAS",
+  "webDir": "out",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    },
+    "AdMob": {
+      "initializeForTesting": true
+    }
+  }
+}

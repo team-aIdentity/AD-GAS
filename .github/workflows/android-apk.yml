@@ -64,6 +64,9 @@ jobs:
           NEXT_PUBLIC_METAMASK_USE_DEEPLINK: ${{ vars.NEXT_PUBLIC_METAMASK_USE_DEEPLINK }}
         run: npm run build:mobile
 
+      - name: Install Capacitor Android tooling
+        run: npm install --no-save --package-lock=false @capacitor/cli@6.2.1 @capacitor/android@6.2.1
+
       - name: Add Android platform
         run: npx cap add android
 
