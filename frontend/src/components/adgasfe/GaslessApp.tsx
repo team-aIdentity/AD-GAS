@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import {
   useAccount,
   useConnect,
@@ -319,12 +318,8 @@ export function GaslessApp() {
   }, [connect, connectors, accountStatus]);
 
   const handleConnect = useCallback(() => {
-    resetConnect();
-    walletLinkingRef.current = false;
-    setIsWalletLinking(false);
-    if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
-    flushSync(() => setShowConnectModal(true));
-  }, [resetConnect]);
+    setShowConnectModal(true);
+  }, []);
 
   const handleDisconnect = useCallback(() => {
     disconnect();

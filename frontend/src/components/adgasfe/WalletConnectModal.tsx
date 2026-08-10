@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import type { Connector, UseConnectReturnType } from 'wagmi';
 import { config } from '@/wagmi.config';
@@ -91,8 +92,12 @@ export function WalletConnectModal({
 
   const nativeConnecting = nativeApp && (isPending || isLinking);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+    >
       <div className="w-full max-w-md rounded-3xl border border-[rgba(255,255,255,0.08)] bg-[#1e293b] p-6">
         <h2 className="mb-4 text-xl font-extrabold text-white">{t('connectWallet')}</h2>
 
@@ -140,6 +145,7 @@ export function WalletConnectModal({
           {isPending ? t('walletConnect.cancelAttempt') : t('close')}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
