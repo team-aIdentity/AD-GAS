@@ -54,7 +54,7 @@ export function WalletConnectModal({
   const { t } = useLocale();
   const [isStarting, setIsStarting] = useState(false);
   const startingRef = useRef(false);
-  const attemptTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const attemptTimeoutRef = useRef<number | null>(null);
   const nativeApp = typeof window !== 'undefined' && isCapacitorNativeApp();
   const visibleConnectors = useMemo(
     () => orderConnectorsForEnvironment(connectors),
