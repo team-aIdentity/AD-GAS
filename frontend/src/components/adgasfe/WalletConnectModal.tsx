@@ -72,23 +72,26 @@ export function WalletConnectModal({
     setIsStarting(false);
   }, [open]);
 
-  const finishConnected = async () => {
-    try {
-      await ensureWalletOnChain(targetChainId);
-    } catch (error) {
-      toast.error(
-        isWalletSwitchRejectedError(error)
-          ? t('toast.networkSwitchRejectedGeneric')
-          : error instanceof Error && error.message
-            ? error.message
-            : t('toast.networkSwitchFailed')
-      );
-    } finally {
-      startingRef.current = false;
-      setIsStarting(false);
-      setWalletLinkingFlag(false);
-      onClose();
-    }
+  const finishConnected = () => {
+    // 연결 승인이 끝난 즉시 모달을 닫는다. 네트워크 동기화는 연결 UX를
+    // 막지 않도록 백그라운드에서 이어서 처리한다.
+    startingRef.current = false;
+    setIsStarting(false);
+    onClose();
+
+    void ensureWalletOnChain(targetChainId)
+      .catch(error => {
+        toast.error(
+          isWalletSwitchRejectedError(error)
+            ? t('toast.networkSwitchRejectedGeneric')
+            : error instanceof Error && error.message
+              ? error.message
+              : t('toast.networkSwitchFailed')
+        );
+      })
+      .finally(() => {
+        setWalletLinkingFlag(false);
+      });
   };
 
   const tryRestoreConnection = async (connector: Connector): Promise<boolean> => {
@@ -107,8 +110,14 @@ export function WalletConnectModal({
     if (nativeApp) setWalletLinkingFlag(true);
 
     try {
-      if ((await connector.isAuthorized()) && (await tryRestoreConnection(connector))) {
-        await finishConnected();
+      // MetaMask SDK의 isAuthorized()는 만료된 채널에서 수십 초간 대기할 수 있다.
+      // 네이티브 앱은 사용자 탭 안에서 connect()를 바로 호출해 딥링크를 즉시 연다.
+      if (
+        !nativeApp &&
+        (await connector.isAuthorized()) &&
+        (await tryRestoreConnection(connector))
+      ) {
+        finishConnected();
         return;
       }
     } catch {
@@ -116,17 +125,19 @@ export function WalletConnectModal({
     }
 
     connect(
-      { connector, chainId: targetChainId },
+      // 네이티브에서는 연결과 체인 전환을 한 SDK 요청에 묶지 않는다.
+      // 먼저 연결 모달을 즉시 띄우고, 성공 후 targetChainId를 동기화한다.
+      nativeApp ? { connector } : { connector, chainId: targetChainId },
       {
         onSuccess: () => {
-          void finishConnected();
+          finishConnected();
         },
         onError: err => {
           void (async () => {
             // MetaMask SDK 세션은 살아 있지만 Wagmi 상태만 끊긴 경우에는
             // 두 번째 connect 대신 기존 승인 세션을 다시 등록한다.
             if (isAlreadyConnectedError(err) && (await tryRestoreConnection(connector))) {
-              await finishConnected();
+              finishConnected();
               return;
             }
 

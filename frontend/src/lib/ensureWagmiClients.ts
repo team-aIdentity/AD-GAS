@@ -25,6 +25,11 @@ type EnsureParams = {
   intervalMs?: number;
 };
 
+type ReadyClients = {
+  publicClient: PublicClient;
+  walletClient?: WalletClient;
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -84,7 +89,7 @@ async function restoreWalletSession(): Promise<Address | undefined> {
 async function tryBuildClients(
   chainId: SupportedChainId,
   accountAddress: Address
-): Promise<{ walletClient: WalletClient; publicClient: PublicClient } | null> {
+): Promise<ReadyClients | null> {
   const publicClient = getPublicClient(config, { chainId });
   if (!publicClient) return null;
 
@@ -161,11 +166,32 @@ export async function ensureWagmiClients({
   expectedAddress,
   maxAttempts = 10,
   intervalMs = 250,
-}: EnsureParams): Promise<{ walletClient: WalletClient; publicClient: PublicClient } | null> {
+}: EnsureParams): Promise<ReadyClients | null> {
   await waitForNativeAppActive();
 
   const initialAccount = getAccount(config);
   const initialAddress = initialAccount.address ?? expectedAddress;
+  const currentUid = config.state.current;
+  const currentConnection = currentUid
+    ? config.state.connections.get(currentUid)
+    : undefined;
+  const addressMatches =
+    !expectedAddress ||
+    initialAddress?.toLowerCase() === expectedAddress.toLowerCase();
+  const readyPublicClient = getPublicClient(config, { chainId });
+
+  // 광고 종료 전까지 Wagmi 연결이 유지된 정상 경로에서는 SDK provider를
+  // 다시 조회하지 않는다. 실제 체인은 호출부의 verifyWalletOnChain에서 이미 검증한다.
+  if (
+    initialAccount.status === 'connected' &&
+    initialAddress &&
+    addressMatches &&
+    currentConnection &&
+    readyPublicClient
+  ) {
+    return { publicClient: readyPublicClient as unknown as PublicClient };
+  }
+
   if (initialAddress) {
     const clients = await tryBuildClients(chainId, initialAddress);
     if (clients) return clients;
