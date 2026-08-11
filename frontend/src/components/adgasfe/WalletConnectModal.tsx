@@ -54,6 +54,7 @@ export function WalletConnectModal({
   const { t } = useLocale();
   const [isStarting, setIsStarting] = useState(false);
   const startingRef = useRef(false);
+  const attemptTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const nativeApp = typeof window !== 'undefined' && isCapacitorNativeApp();
   const visibleConnectors = useMemo(
     () => orderConnectorsForEnvironment(connectors),
@@ -68,13 +69,24 @@ export function WalletConnectModal({
 
   useEffect(() => {
     if (open) return;
+    if (attemptTimeoutRef.current) {
+      window.clearTimeout(attemptTimeoutRef.current);
+      attemptTimeoutRef.current = null;
+    }
     startingRef.current = false;
     setIsStarting(false);
   }, [open]);
 
+  const clearAttemptTimeout = () => {
+    if (!attemptTimeoutRef.current) return;
+    window.clearTimeout(attemptTimeoutRef.current);
+    attemptTimeoutRef.current = null;
+  };
+
   const finishConnected = () => {
     // 연결 승인이 끝난 즉시 모달을 닫는다. 네트워크 동기화는 연결 UX를
     // 막지 않도록 백그라운드에서 이어서 처리한다.
+    clearAttemptTimeout();
     startingRef.current = false;
     setIsStarting(false);
     onClose();
@@ -108,6 +120,15 @@ export function WalletConnectModal({
     startingRef.current = true;
     setIsStarting(true);
     if (nativeApp) setWalletLinkingFlag(true);
+    clearAttemptTimeout();
+    attemptTimeoutRef.current = window.setTimeout(() => {
+      if (!startingRef.current) return;
+      startingRef.current = false;
+      setIsStarting(false);
+      setWalletLinkingFlag(false);
+      reset();
+      toast.error(t('errors.walletConnectionTimeout'));
+    }, 12000);
 
     try {
       // MetaMask SDK의 isAuthorized()는 만료된 채널에서 수십 초간 대기할 수 있다.
@@ -125,9 +146,9 @@ export function WalletConnectModal({
     }
 
     connect(
-      // 네이티브에서는 연결과 체인 전환을 한 SDK 요청에 묶지 않는다.
-      // 먼저 연결 모달을 즉시 띄우고, 성공 후 targetChainId를 동기화한다.
-      nativeApp ? { connector } : { connector, chainId: targetChainId },
+      // MetaMask SDK 커넥터 규격에 맞게 네이티브에서도 chainId를 전달한다.
+      // 느린 isAuthorized 사전 조회는 건너뛰므로 딥링크 호출은 여전히 즉시 시작된다.
+      { connector, chainId: targetChainId },
       {
         onSuccess: () => {
           finishConnected();
@@ -141,6 +162,7 @@ export function WalletConnectModal({
               return;
             }
 
+            clearAttemptTimeout();
             startingRef.current = false;
             setIsStarting(false);
             setWalletLinkingFlag(false);
@@ -159,6 +181,7 @@ export function WalletConnectModal({
   if (!open) return null;
 
   const handleClose = () => {
+    clearAttemptTimeout();
     reset();
     startingRef.current = false;
     setIsStarting(false);
@@ -172,9 +195,9 @@ export function WalletConnectModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex min-h-[100dvh] w-full max-w-[100vw] touch-manipulation items-center justify-center overflow-y-auto overscroll-contain bg-black/80 p-4 backdrop-blur-sm"
     >
-      <div className="w-full max-w-md rounded-3xl border border-[rgba(255,255,255,0.08)] bg-[#1e293b] p-6">
+      <div className="pointer-events-auto w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl border border-[rgba(255,255,255,0.08)] bg-[#1e293b] p-6">
         <h2 className="mb-4 text-xl font-extrabold text-white">{t('connectWallet')}</h2>
 
         {nativeConnecting ? (
@@ -200,7 +223,7 @@ export function WalletConnectModal({
                   type="button"
                   disabled={isPending || isStarting}
                   onClick={() => void startConnect(connector)}
-                  className="w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] px-4 py-3 text-left font-medium text-white transition-colors hover:bg-[rgba(99,102,241,0.13)] disabled:opacity-50"
+                  className="pointer-events-auto min-h-12 w-full touch-manipulation rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] px-4 py-3 text-left font-medium text-white transition-colors hover:bg-[rgba(99,102,241,0.13)] disabled:opacity-50"
                 >
                   {connectorLabel(connector)}
                 </button>
@@ -212,7 +235,7 @@ export function WalletConnectModal({
         <button
           type="button"
           onClick={handleClose}
-          className="mt-4 w-full py-2 text-sm text-[#94a3b8] hover:text-white"
+          className="pointer-events-auto mt-4 min-h-11 w-full touch-manipulation py-2 text-sm text-[#94a3b8] hover:text-white"
         >
           {isPending ? t('walletConnect.cancelAttempt') : t('close')}
         </button>
