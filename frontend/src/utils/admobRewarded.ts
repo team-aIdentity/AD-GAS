@@ -33,34 +33,24 @@ export type ShowAdMobRewardedOptions = {
 
 /** 리워드 다이얼로그 닫기 후 WebView·MetaMask 딥링크 충돌 방지 */
 async function waitAfterAdDismiss(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 700));
   try {
     const { App } = await import('@capacitor/app');
     const state = await App.getState();
     if (!state.isActive) {
       await new Promise<void>(resolve => {
-        let listener: { remove: () => Promise<void> } | undefined;
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          void listener?.remove();
-          resolve();
-        };
-        const timer = setTimeout(finish, 2500);
+        const timer = setTimeout(resolve, 5000);
         void App.addListener('appStateChange', ({ isActive }) => {
-          if (isActive) finish();
-        }).then(handle => {
-          listener = handle;
-          if (settled) void handle.remove();
+          if (isActive) {
+            clearTimeout(timer);
+            resolve();
+          }
         });
       });
     }
-    // Dismissed 콜백 뒤 WebView가 한 프레임 그려질 정도만 기다린다.
-    // 기존 최소 1.1초 고정 대기는 서명 모달 체감 지연의 원인이었다.
-    await new Promise(resolve => setTimeout(resolve, 120));
+    await new Promise(resolve => setTimeout(resolve, 400));
   } catch {
-    await new Promise(resolve => setTimeout(resolve, 180));
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 }
 

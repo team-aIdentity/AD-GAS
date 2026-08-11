@@ -23,7 +23,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** 이전 지갑 요청에서 앱으로 돌아온 뒤 WebView와 MetaMask SDK 채널이 복구될 때까지 대기 */
-async function waitForNativeWalletReturn(maxMs = 2500): Promise<void> {
+async function waitForNativeWalletReturn(maxMs = 5000): Promise<void> {
   try {
     const { App } = await import('@capacitor/app');
     const state = await App.getState();
@@ -47,11 +47,9 @@ async function waitForNativeWalletReturn(maxMs = 2500): Promise<void> {
         });
       });
     }
-    // 앱 활성화 이벤트 뒤 SDK 채널이 재개될 최소 시간만 확보한다.
-    // 채널 상태와 무관한 700ms 고정 대기는 제거한다.
-    await sleep(120);
+    await sleep(700);
   } catch {
-    await sleep(180);
+    await sleep(900);
   }
 }
 
