@@ -8,6 +8,12 @@ on:
       use_test_ads:
         description: 'AdMob 테스트 광고 사용 (true/false)'
         default: 'true'
+      version_code:
+        description: 'Android versionCode'
+        default: '15'
+      version_name:
+        description: 'Android versionName'
+        default: '1.0.14'
 
 permissions:
   contents: read
@@ -70,6 +76,25 @@ jobs:
 
       - name: Add Android platform
         run: npx cap add android
+
+      - name: Set Android app version
+        env:
+          VERSION_CODE: ${{ github.event.inputs.version_code }}
+          VERSION_NAME: ${{ github.event.inputs.version_name }}
+        run: |
+          node -e "
+          const fs = require('fs');
+          const p = 'android/app/build.gradle';
+          let x = fs.readFileSync(p, 'utf8');
+          const code = process.env.VERSION_CODE;
+          const name = process.env.VERSION_NAME;
+          if (!/^\d+$/.test(code || '')) throw new Error('Invalid Android versionCode');
+          if (!name) throw new Error('Missing Android versionName');
+          x = x.replace(/versionCode\s+\d+/, 'versionCode ' + code);
+          x = x.replace(/versionName\s+\"[^\"]+\"/, 'versionName \"' + name + '\"');
+          fs.writeFileSync(p, x);
+          console.log('Android version =', name, '(' + code + ')');
+          "
 
       - name: Inject AdMob App ID into AndroidManifest
         env:
