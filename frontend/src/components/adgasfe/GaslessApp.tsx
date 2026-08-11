@@ -770,31 +770,25 @@ export function GaslessApp() {
 
     return (
       <div className="min-h-screen bg-[#0f172a] text-white">
-        {isMobile ? (
-          <>
-            <MobileHeader
-              isConnected={false}
-              onConnect={handleConnect}
-              onDisconnect={() => {}}
-              freeTransactionsUsed={getFreeTransactionsUsed()}
-            />
-            <main className="flex min-h-[50vh] items-center justify-center px-[calc(1.25rem+10px)] pb-8 pt-2">
-              {promptCard}
-            </main>
-          </>
-        ) : (
-          <>
-            <Header
-              isConnected={false}
-              walletAddress=""
-              onConnect={handleConnect}
-              onDisconnect={() => {}}
-            />
-            <main className="flex min-h-[60vh] items-center justify-center px-12 py-8">
-              {promptCard}
-            </main>
-          </>
-        )}
+        <div className="lg:hidden">
+          <MobileHeader
+            isConnected={false}
+            onConnect={handleConnect}
+            onDisconnect={() => {}}
+            freeTransactionsUsed={getFreeTransactionsUsed()}
+          />
+        </div>
+        <div className="hidden lg:block">
+          <Header
+            isConnected={false}
+            walletAddress=""
+            onConnect={handleConnect}
+            onDisconnect={() => {}}
+          />
+        </div>
+        <main className="flex min-h-[50vh] items-center justify-center px-[calc(1.25rem+10px)] pb-8 pt-2 lg:min-h-[60vh] lg:px-12 lg:py-8">
+          {promptCard}
+        </main>
         <WalletConnectModal
           open={showConnectModal}
           onClose={() => {
