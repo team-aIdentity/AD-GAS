@@ -42,6 +42,14 @@ type VerifiedChain = {
 
 let cachedProvider: CachedProvider | null = null;
 let verifiedChain: VerifiedChain | null = null;
+let switchInFlight: {
+  targetChainId: SupportedChainId;
+  requestId: symbol;
+  promise: Promise<void>;
+} | null = null;
+
+const FAST_CHAIN_CHECK_MS = 1200;
+const SWITCH_REQUEST_TIMEOUT_MS = 8000;
 
 export function clearWalletChainCache(): void {
   if (cachedProvider?.chainChangedListener) {
@@ -52,6 +60,7 @@ export function clearWalletChainCache(): void {
   }
   cachedProvider = null;
   verifiedChain = null;
+  switchInFlight = null;
 }
 
 function markWalletChainVerified(targetChainId: SupportedChainId): void {
@@ -100,7 +109,7 @@ const CHAIN_PARAMS: Record<
   },
 };
 
-async function getConnectedProvider(): Promise<Eip1193Provider | null> {
+async function getConnectedProvider(maxMs = 5000): Promise<Eip1193Provider | null> {
   const { connector } = getAccount(config);
   if (!connector) return null;
 
@@ -111,7 +120,7 @@ async function getConnectedProvider(): Promise<Eip1193Provider | null> {
   try {
     const provider = await withTimeout(
       connector.getProvider(),
-      5000,
+      maxMs,
       '지갑 연결 응답이 지연되고 있습니다. 지갑을 다시 연결해주세요.'
     );
     if (!provider || typeof provider !== 'object') return null;
@@ -167,15 +176,15 @@ export function isWalletKnownOnChain(targetChainId: SupportedChainId): boolean {
 }
 
 /** MetaMask provider의 실제 eth_chainId (wagmi 캐시와 다를 수 있음) */
-export async function readProviderChainId(): Promise<number | null> {
+export async function readProviderChainId(maxMs = 5000): Promise<number | null> {
   try {
-    const provider = await getConnectedProvider();
+    const provider = await getConnectedProvider(maxMs);
     const request = provider?.request;
     if (!request) return null;
 
     const hex = await withTimeout(
       request({ method: 'eth_chainId' }),
-      5000,
+      maxMs,
       '지갑 네트워크 확인 시간이 초과되었습니다.'
     );
     const chainId = typeof hex === 'string' ? Number.parseInt(hex, 16) : null;
@@ -198,7 +207,7 @@ export async function verifyWalletOnChain(
 ): Promise<void> {
   if (isWalletKnownOnChain(targetChainId)) return;
 
-  const current = await readProviderChainId();
+  const current = await readProviderChainId(1500);
   if (current === targetChainId) return;
 
   const targetName = CHAIN_PARAMS[targetChainId].chainName;
@@ -233,13 +242,41 @@ export function isWalletSwitchRejectedError(err: unknown): boolean {
   return /user rejected|user denied|request rejected|사용자.*거절|요청.*거절/i.test(message);
 }
 
+/** RPC 응답 또는 실제 chainChanged/Wagmi 갱신 중 먼저 도착한 신호를 성공으로 처리한다. */
+async function waitForSwitchAcknowledgement(
+  requestPromise: Promise<unknown>,
+  targetChainId: SupportedChainId,
+  message: string
+): Promise<void> {
+  let intervalId: number | undefined;
+  const chainSignal = new Promise<void>(resolve => {
+    const check = () => {
+      if (!isWalletKnownOnChain(targetChainId)) return;
+      if (intervalId != null) window.clearInterval(intervalId);
+      resolve();
+    };
+    intervalId = window.setInterval(check, 50);
+    check();
+  });
+
+  try {
+    await withTimeout(
+      Promise.race([requestPromise.then(() => undefined), chainSignal]),
+      SWITCH_REQUEST_TIMEOUT_MS,
+      message
+    );
+  } finally {
+    if (intervalId != null) window.clearInterval(intervalId);
+  }
+}
+
 async function switchWithProvider(targetChainId: SupportedChainId): Promise<void> {
-  const provider = await getConnectedProvider();
+  const provider = await getConnectedProvider(2500);
   const request = provider?.request;
   if (!request) {
-    await withTimeout(
+    await waitForSwitchAcknowledgement(
       switchChain(config, { chainId: targetChainId }),
-      20000,
+      targetChainId,
       `${CHAIN_PARAMS[targetChainId].chainName} 네트워크 전환 요청 시간이 초과되었습니다. 지갑 확장 프로그램을 다시 연결해주세요.`
     );
     markWalletChainVerified(targetChainId);
@@ -248,12 +285,12 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
 
   const chain = CHAIN_PARAMS[targetChainId];
   try {
-    await withTimeout(
+    await waitForSwitchAcknowledgement(
       request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: chain.chainId }],
       }),
-      20000,
+      targetChainId,
       `${chain.chainName} 네트워크 전환 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
     );
     markWalletChainVerified(targetChainId);
@@ -268,12 +305,12 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
       20000,
       `${chain.chainName} 네트워크 추가 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
     );
-    await withTimeout(
+    await waitForSwitchAcknowledgement(
       request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: chain.chainId }],
       }),
-      20000,
+      targetChainId,
       `${chain.chainName} 네트워크 전환 요청 시간이 초과되었습니다. MetaMask를 열어 요청을 확인해주세요.`
     );
     markWalletChainVerified(targetChainId);
@@ -284,16 +321,13 @@ async function switchWithProvider(targetChainId: SupportedChainId): Promise<void
  * 네트워크 카드 선택·최초 지갑 연결 시에만 wallet_switchEthereumChain 요청.
  * 전송·서명 단계에서는 verifyWalletOnChain을 사용해 중복 전환을 금지한다.
  */
-export async function ensureWalletOnChain(targetChainId: SupportedChainId): Promise<void> {
+async function performWalletChainSwitch(targetChainId: SupportedChainId): Promise<void> {
   if (isWalletKnownOnChain(targetChainId)) return;
 
-  // Wagmi가 현재 체인을 이미 알고 있으면 별도의 eth_chainId 왕복 없이 바로
-  // 전환 요청한다. MetaMask SDK가 응답하지 않을 때 생기던 선행 5초 대기를 없앤다.
-  const accountChainId = getAccount(config).chainId;
-  if (accountChainId == null) {
-    const current = await readProviderChainId();
-    if (current === targetChainId) return;
-  }
+  // Wagmi 값이 이전 체인에 머물러 있어도 provider가 이미 목표 체인이면
+  // 중복 wallet_switchEthereumChain 요청을 보내지 않는다. 확인은 최대 1.2초만 기다린다.
+  const current = await readProviderChainId(FAST_CHAIN_CHECK_MS);
+  if (current === targetChainId) return;
 
   const useLinking = isCapacitorNativeApp();
   if (useLinking) setWalletLinkingFlag(true);
@@ -314,4 +348,18 @@ export async function ensureWalletOnChain(targetChainId: SupportedChainId): Prom
   // MetaMask SDK는 앱 복귀 직후 eth_chainId/chainChanged 반영이 늦을 수 있으므로,
   // 여기서 다시 polling하며 성공한 전환을 실패로 되돌리지 않는다.
   markWalletChainVerified(targetChainId);
+}
+
+export function ensureWalletOnChain(targetChainId: SupportedChainId): Promise<void> {
+  if (isWalletKnownOnChain(targetChainId)) return Promise.resolve();
+  if (switchInFlight?.targetChainId === targetChainId) {
+    return switchInFlight.promise;
+  }
+
+  const requestId = Symbol('wallet-chain-switch');
+  const promise = performWalletChainSwitch(targetChainId).finally(() => {
+    if (switchInFlight?.requestId === requestId) switchInFlight = null;
+  });
+  switchInFlight = { targetChainId, requestId, promise };
+  return promise;
 }

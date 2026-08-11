@@ -302,7 +302,7 @@ export function GaslessApp() {
         const rejected = isWalletSwitchRejectedError(error);
         const providerChainId = rejected && chainId != null
           ? chainId
-          : await readProviderChainId();
+          : await readProviderChainId(1500);
         if (providerChainId === targetChainId) {
           selectedNetworkRef.current = network;
           setSelectedNetwork(network);
