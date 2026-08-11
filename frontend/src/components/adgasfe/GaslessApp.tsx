@@ -46,7 +46,6 @@ import {
 import {
   clearWalletChainCache,
   ensureWalletOnChain,
-  isWalletKnownOnChain,
   isWalletSwitchRejectedError,
   readProviderChainId,
   verifyWalletOnChain,
@@ -146,7 +145,6 @@ export function GaslessApp() {
     chainId: SupportedChainId;
   } | null>(null);
   const [isTransacting, setIsTransacting] = useState(false); // used in handleAdComplete
-  const [isPreparingSend, setIsPreparingSend] = useState(false);
   const [txStatusMessage, setTxStatusMessage] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | null>(null);
   const [freeTransactionsUsed, setFreeTransactionsUsed] = useState(0);
@@ -687,7 +685,7 @@ export function GaslessApp() {
     toast.info(t('toast.adCancelled'));
   }, []);
 
-  const handleSendClick = useCallback(async () => {
+  const handleSendClick = useCallback(() => {
     if (!isConnected) {
       toast.error(t('toast.connectFirst'));
       return;
@@ -722,32 +720,19 @@ export function GaslessApp() {
     const targetChainId = targetNetwork.chainId as SupportedChainId;
     const targetToken = selectedToken;
     networkIntentChainIdRef.current = targetChainId;
-    const needsNetworkCheck = !isWalletKnownOnChain(targetChainId);
-    if (needsNetworkCheck) setIsPreparingSend(true);
-    const networkToastId = needsNetworkCheck
-      ? toast.loading(`${targetNetwork.name} 네트워크 확인 중...`)
-      : undefined;
-    try {
-      await verifyWalletOnChain(targetChainId);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : t('toast.networkSwitchFailed');
-      toast.error(msg);
-      return;
-    } finally {
-      if (networkToastId != null) toast.dismiss(networkToastId);
-      if (needsNetworkCheck) setIsPreparingSend(false);
-    }
 
-    setUserError(null);
-    setPendingTransaction({
-      to: recipientAddress.trim(),
-      amount,
-      token: targetToken,
-      network: { name: targetNetwork.name },
-      chainId: targetChainId,
+    // 클릭 이벤트 안에서 광고 모달을 즉시 마운트해 웹 광고의 사용자 제스처도 유지한다.
+    flushSync(() => {
+      setUserError(null);
+      setPendingTransaction({
+        to: recipientAddress.trim(),
+        amount,
+        token: targetToken,
+        network: { name: targetNetwork.name },
+        chainId: targetChainId,
+      });
+      setShowAdModal(true);
     });
-    setShowAdModal(true);
   }, [
     isConnected,
     recipientAddress,
@@ -854,7 +839,7 @@ export function GaslessApp() {
             onAmountChange={setAmount}
             availableTokens={availableTokens}
             onSendClick={handleSendClick}
-            isPreparing={isPreparingSend}
+            isPreparing={false}
           />
         </main>
         <footer className="px-5 pb-8 text-center">
@@ -959,7 +944,7 @@ export function GaslessApp() {
                 availableTokens={availableTokens}
                 selectedNetwork={selectedNetwork}
                 onSendClick={handleSendClick}
-                isPreparing={isPreparingSend}
+                isPreparing={false}
                 onCancelClick={() => {
                   setRecipientAddress('');
                   setAmount('0.0001');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Play, Volume2, Loader2, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -39,14 +39,17 @@ export function AdModal({
   const [isLoadingRealAd, setIsLoadingRealAd] = useState(false);
   /** true면 모달이 전체화면 광고를 가리지 않음(GPT/AdMob 전면) */
   const [adSurfaceActive, setAdSurfaceActive] = useState(false);
+  const autoStartedRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
-      setTimeRemaining(15);
-      setIsPlaying(false);
-      setIsLoadingRealAd(false);
-      setAdSurfaceActive(false);
+    if (!isOpen) {
+      autoStartedRef.current = false;
+      return;
     }
+    setTimeRemaining(15);
+    setIsPlaying(false);
+    setIsLoadingRealAd(false);
+    setAdSurfaceActive(false);
   }, [isOpen]);
 
   useEffect(() => {
@@ -59,7 +62,7 @@ export function AdModal({
     onComplete();
   }, [timeRemaining, isOpen, isPlaying, isRewardedAdConfigured, onComplete]);
 
-  const handlePlayAd = async () => {
+  const handlePlayAd = useCallback(async () => {
     if (isRewardedAdConfigured && showRealRewardedAd) {
       setIsLoadingRealAd(true);
       setAdSurfaceActive(false);
@@ -82,7 +85,13 @@ export function AdModal({
       return;
     }
     setIsPlaying(true);
-  };
+  }, [isRewardedAdConfigured, onComplete, showRealRewardedAd]);
+
+  useEffect(() => {
+    if (!isOpen || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void handlePlayAd();
+  }, [isOpen, handlePlayAd]);
 
   if (!isOpen) return null;
 
