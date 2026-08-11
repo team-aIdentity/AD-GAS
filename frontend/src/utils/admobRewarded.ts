@@ -3,6 +3,13 @@ import { RewardAdPluginEvents } from '@capacitor-community/admob';
 
 import { isCapacitorNativeApp } from './capacitorNative';
 
+const ANDROID_REWARDED_TEST_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
+let initializationPromise: Promise<void> | null = null;
+
+function useTestAds(): boolean {
+  return process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
+}
+
 function pickRewardAdUnitId(): string | undefined {
   if (typeof window === 'undefined') return undefined;
   const ios = process.env.NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_IOS?.trim();
@@ -11,8 +18,29 @@ function pickRewardAdUnitId(): string | undefined {
 
   const platform = Capacitor.getPlatform();
   if (platform === 'ios') return ios || fallback;
-  if (platform === 'android') return android || fallback;
+  if (platform === 'android') {
+    return android || fallback || (useTestAds() ? ANDROID_REWARDED_TEST_AD_UNIT_ID : undefined);
+  }
   return fallback;
+}
+
+/** AdMob SDK 초기화를 단일 실행으로 보장하고 광고 준비 전에 완료까지 기다린다. */
+export function initializeAdMobRewarded(): Promise<void> {
+  if (!isCapacitorNativeApp()) return Promise.resolve();
+  if (initializationPromise) return initializationPromise;
+
+  initializationPromise = import('@capacitor-community/admob')
+    .then(({ AdMob }) =>
+      AdMob.initialize({
+        initializeForTesting: useTestAds(),
+      })
+    )
+    .then(() => undefined)
+    .catch(error => {
+      initializationPromise = null;
+      throw error;
+    });
+  return initializationPromise;
 }
 
 /**
@@ -70,13 +98,13 @@ export async function showAdMobRewardedVideo(options?: ShowAdMobRewardedOptions)
     );
   }
 
-  const useTestAds = process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
+  await initializeAdMobRewarded();
 
   const { AdMob } = await import('@capacitor-community/admob');
 
   await AdMob.prepareRewardVideoAd({
     adId,
-    isTesting: useTestAds,
+    isTesting: useTestAds(),
   });
 
   return new Promise((resolve, reject) => {

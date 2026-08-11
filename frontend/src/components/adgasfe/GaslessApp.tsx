@@ -55,6 +55,7 @@ import { writeContract } from '@wagmi/core';
 import { config as wagmiConfig } from '@/wagmi.config';
 import { ensureWagmiClients } from '@/lib/ensureWagmiClients';
 import { getSponsoredTransferContractAddress } from '@/lib/sponsoredTransferContracts';
+import { initializeAdMobRewarded } from '@/utils/admobRewarded';
 
 const DAILY_LIMIT = 10;
 
@@ -176,18 +177,8 @@ export function GaslessApp() {
 
   // 앱(Capacitor WebView)에서 열렸을 때만 AdMob 초기화 (리워드 영상용)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
-      .Capacitor;
-    if (!cap?.isNativePlatform?.()) return;
-    const testing = process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
-    import('@capacitor-community/admob')
-      .then(m =>
-        m.AdMob.initialize({
-          initializeForTesting: testing,
-        })
-      )
-      .catch(() => {});
+    if (!isCapacitorNativeApp()) return;
+    void initializeAdMobRewarded().catch(() => {});
   }, []);
 
   const connectedChainId = useChainId();
