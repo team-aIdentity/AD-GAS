@@ -3,6 +3,7 @@ import type { TypedData } from 'viem';
 import { config as wagmiConfig } from '@/wagmi.config';
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
 import {
+  armWalletSessionRecovery,
   setWalletLinkingFlag,
   setTxSigningInProgress,
 } from '@/components/CapacitorWalletBootstrap';
@@ -15,7 +16,9 @@ export function beginWalletTxSigning(): void {
 
 export function endWalletTxSigning(): void {
   setTxSigningInProgress(false);
-  setWalletLinkingFlag(false);
+  // 서명 결과가 돌아온 직후 MetaMask SDK가 일시적인 disconnect를 늦게
+  // 전달할 수 있으므로 기존 승인 세션을 짧게 감시하고 자동 복원한다.
+  armWalletSessionRecovery();
 }
 
 function sleep(ms: number): Promise<void> {

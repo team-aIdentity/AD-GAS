@@ -195,6 +195,18 @@ export function TransferSection({
             </div>
           </div>
 
+          {selectedToken && (
+            <div
+              className={`w-full rounded-xl border px-4 py-3 text-[13px] font-semibold ${
+                selectedToken.sponsorshipMode === 'approval'
+                  ? 'border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.09)] text-[#fbbf24]'
+                  : 'border-[rgba(16,185,129,0.28)] bg-[rgba(16,185,129,0.09)] text-[#34d399]'
+              }`}
+            >
+              {t(`tokenMode.${selectedToken.sponsorshipMode}`)}
+            </div>
+          )}
+
           <div className="relative rounded-[18px] w-full bg-gradient-to-b from-[#1e40af] to-[#1e3a8a] border border-[rgba(59,130,246,0.25)] p-5">
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1">

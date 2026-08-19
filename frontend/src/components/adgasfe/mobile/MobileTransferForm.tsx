@@ -134,6 +134,17 @@ export function MobileTransferForm({
                 </div>
               )}
             </div>
+            {selectedToken && (
+              <p
+                className={`mt-2 rounded-lg border px-3 py-2 text-[11px] font-semibold ${
+                  selectedToken.sponsorshipMode === 'approval'
+                    ? 'border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.09)] text-[#fbbf24]'
+                    : 'border-[rgba(16,185,129,0.28)] bg-[rgba(16,185,129,0.09)] text-[#34d399]'
+                }`}
+              >
+                {t(`tokenMode.${selectedToken.sponsorshipMode}`)}
+              </p>
+            )}
           </div>
           <div>
             <p className="font-bold text-[#e2e8f0] text-[13px] mb-2">

@@ -1,18 +1,22 @@
 import { isCapacitorNativeApp } from '@/utils/capacitorNative';
+import { openExternalAppUrl } from '@/lib/nativeExternalAppLauncher';
 
 /**
  * MetaMask SDK 딥링크 — Capacitor WebView에서는 **절대** `location.assign` 사용 금지.
  * (메인 프레임이 Vercel URL을 통째로 다시 로드해 1분 가까이 걸리는 원인)
  *
- * iframe / anchor 로 외부 MetaMask만 실행하고 WebView 세션은 유지합니다.
- * Capacitor Android는 shouldOverrideUrlLoading → launchIntent 로 외부 앱을 엽니다.
+ * 광고 종료처럼 브라우저 사용자 제스처가 끝난 뒤에도 동작하도록 Capacitor에서는
+ * 네이티브 Intent로 MetaMask를 실행합니다. WebView 세션은 그대로 유지됩니다.
  */
 export function openMetaMaskDeeplink(url: string): void {
   if (typeof window === 'undefined') return;
 
   if (isCapacitorNativeApp()) {
-    if (openViaHiddenAnchor(url)) return;
-    openViaHiddenIframe(url);
+    // 숨은 anchor.click()은 호출 자체는 성공해도 비동기 광고 콜백에서는 Android가
+    // 새 창을 차단할 수 있다. 네이티브 결과가 실패한 경우에만 WebView 폴백을 쓴다.
+    void openExternalAppUrl(url).then(opened => {
+      if (!opened) openViaSameWindowAnchor(url);
+    });
     return;
   }
 
@@ -40,10 +44,12 @@ function openViaHiddenAnchor(url: string): boolean {
   }
 }
 
-function openViaHiddenIframe(url: string): void {
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'display:none;width:0;height:0;border:0';
-  iframe.src = url;
-  document.body.appendChild(iframe);
-  window.setTimeout(() => iframe.remove(), 3000);
+function openViaSameWindowAnchor(url: string): void {
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.target = '_self';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }

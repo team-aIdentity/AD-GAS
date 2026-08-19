@@ -9,10 +9,10 @@ import {
   useChainId,
   useReadContracts,
 } from 'wagmi';
-import { formatUnits, parseUnits, encodePacked, keccak256, getAddress, maxUint256 } from 'viem';
+import { bytesToHex, formatUnits, isAddress, parseUnits, maxUint256 } from 'viem';
 import { Toaster } from 'sonner';
 import { toast } from 'sonner';
-import { AdWalletRelayerSDK } from '../../../../src';
+import { AdWalletRelayerSDK, type SponsoredTransferRequest } from '../../../../src';
 import { SUPPORTED_NETWORKS, DEFAULT_NETWORK } from '@/lib/networks';
 import { getChainTokens, findChainToken, tokenDefToUiToken, getDefaultUiToken } from '@/lib/tokens';
 import { erc20Abi } from 'viem';
@@ -37,7 +37,11 @@ import {
   getCapacitorPreferredConnector,
 } from '@/lib/walletConnectEnvironment';
 import { getRelayerApiBase } from '@/lib/relayerApiBase';
-import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
+import {
+  cancelWalletSessionRecovery,
+  isWalletSessionRecoveryActive,
+  setWalletLinkingFlag,
+} from '@/components/CapacitorWalletBootstrap';
 import {
   beginWalletTxSigning,
   endWalletTxSigning,
@@ -51,11 +55,12 @@ import {
   verifyWalletOnChain,
   type SupportedChainId,
 } from '@/lib/ensureWalletChain';
-import { writeContract } from '@wagmi/core';
+import { getPublicClient, writeContract } from '@wagmi/core';
 import { config as wagmiConfig } from '@/wagmi.config';
 import { ensureWagmiClients } from '@/lib/ensureWagmiClients';
 import { getSponsoredTransferContractAddress } from '@/lib/sponsoredTransferContracts';
-import { initializeAdMobRewarded } from '@/utils/admobRewarded';
+import { preloadAdMobRewarded } from '@/utils/admobRewarded';
+import { isGiwaDojangRecipientVerified } from '@/lib/giwaDojang';
 
 const DAILY_LIMIT = 10;
 
@@ -75,6 +80,12 @@ function detectMobileLayout(): boolean {
 function getErrorKey(error: Error): string {
   const msg = error.message.toLowerCase();
   if (
+    msg.includes('rpcer53') ||
+    msg.includes('transport request timed out') ||
+    (msg.includes('rpc client invoke method') && msg.includes('timed out'))
+  )
+    return 'errors.walletTransportTimeout';
+  if (
     msg.includes('ad not completed') ||
     msg.includes('ad was not completed') ||
     msg.includes('ad incomplete') ||
@@ -88,6 +99,14 @@ function getErrorKey(error: Error): string {
     return 'errors.paymasterFunds';
   if (msg.includes('timeout') || msg.includes('network') || msg.includes('econnrefused'))
     return 'errors.network';
+  if (
+    msg.includes('0xb12c8f91') ||
+    msg.includes('notverified') ||
+    msg.includes('not verified') ||
+    msg.includes('dojang') ||
+    msg.includes('verifiedtoken')
+  )
+    return 'errors.giwaRecipientNotVerified';
   return '';
 }
 
@@ -109,9 +128,21 @@ function getFreeTransactionsUsed(): number {
 export function GaslessApp() {
   const { t } = useLocale();
   const rewardedAd = useGoogleRewardedAd();
-  const { address, status: accountStatus } = useAccount();
-  // 재연결(reconnecting) 중에는 캐시된 주소가 보이지 않도록, 실제 연결됐을 때만 연결 상태 표시
-  const isConnected = accountStatus === 'connected' && !!address;
+  const { address: connectedAddress, status: accountStatus } = useAccount();
+  const retainedAddressRef = useRef<typeof connectedAddress>(undefined);
+  if (connectedAddress) retainedAddressRef.current = connectedAddress;
+  const isRecoveringWalletSession =
+    isCapacitorNativeApp() && isWalletSessionRecoveryActive();
+  // 트랜잭션 성공 직후 SDK의 일시적인 disconnect/reconnecting 이벤트가 와도
+  // 기존 승인 주소와 연결 화면을 유지한다. 수동 해제 시에는 복구 상태를 먼저 지운다.
+  const address =
+    connectedAddress ??
+    (isRecoveringWalletSession ? retainedAddressRef.current : undefined);
+  const isConnected =
+    !!address &&
+    (accountStatus === 'connected' ||
+      accountStatus === 'reconnecting' ||
+      isRecoveringWalletSession);
   const { connectors, connect, reset: resetConnect, isPending: isConnectPending } = useConnect();
   const { disconnect } = useDisconnect();
 
@@ -127,6 +158,7 @@ export function GaslessApp() {
   // 사용자가 앱에서 선택한 체인은 지갑의 지연된 chainId 이벤트보다 우선한다.
   const selectedNetworkRef = useRef<Network>(DEFAULT_NETWORK);
   const networkIntentChainIdRef = useRef<SupportedChainId | null>(null);
+  const networkChangeRequestRef = useRef(0);
   const [activeTab, setActiveTab] = useState<'send' | 'transaction'>('send');
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('0.0001');
@@ -145,6 +177,7 @@ export function GaslessApp() {
     network: { name: string };
     chainId: SupportedChainId;
   } | null>(null);
+  const [isPreparingSend, setIsPreparingSend] = useState(false);
   const [isTransacting, setIsTransacting] = useState(false); // used in handleAdComplete
   const [txStatusMessage, setTxStatusMessage] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | null>(null);
@@ -175,10 +208,10 @@ export function GaslessApp() {
     return () => {};
   }, []);
 
-  // 앱(Capacitor WebView)에서 열렸을 때만 AdMob 초기화 (리워드 영상용)
+  // 앱 진입 시 리워드 영상을 미리 준비해 전송 버튼에서 바로 표시한다.
   useEffect(() => {
     if (!isCapacitorNativeApp()) return;
-    void initializeAdMobRewarded().catch(() => {});
+    void preloadAdMobRewarded().catch(() => {});
   }, []);
 
   const connectedChainId = useChainId();
@@ -253,7 +286,17 @@ export function GaslessApp() {
     flushSync(() => setShowConnectModal(true));
   }, [resetConnect]);
 
+  // MetaMask 승인 후 account 상태가 먼저 연결되면 SDK mutation 완료를 더 기다리지 않고
+  // 연결 모달을 즉시 닫는다. 네트워크 선택/전환은 메인 화면에서 별도로 수행한다.
+  useEffect(() => {
+    if (!isConnected || !showConnectModal) return;
+    resetConnect();
+    setWalletLinkingFlag(false);
+    setShowConnectModal(false);
+  }, [isConnected, resetConnect, showConnectModal]);
+
   const handleDisconnect = useCallback(() => {
+    cancelWalletSessionRecovery();
     disconnect();
     clearWalletChainCache();
     setShowConnectModal(false);
@@ -270,12 +313,14 @@ export function GaslessApp() {
       }
       if (
         network.chainId === selectedNetwork.chainId &&
-        (!isConnected || chainId === network.chainId)
+        !isConnected
       ) {
         return;
       }
 
       const targetChainId = network.chainId as SupportedChainId;
+      const requestId = ++networkChangeRequestRef.current;
+      const previousNetwork = selectedNetworkRef.current;
       selectedNetworkRef.current = network;
       networkIntentChainIdRef.current = targetChainId;
       setSelectedNetwork(network);
@@ -286,26 +331,32 @@ export function GaslessApp() {
         if (isCapacitorNativeApp()) setWalletLinkingFlag(true);
         toast.info(`${network.name} 네트워크로 전환해 주세요.`);
         await ensureWalletOnChain(targetChainId);
+        if (requestId !== networkChangeRequestRef.current) return;
         toast.success(t('toast.networkSwitched', { name: network.name }));
       } catch (error) {
-        // wagmi의 chainId는 모바일 복귀 직후 이전 Base 값을 잠시 유지할 수 있다.
-        // provider를 직접 확인해 실제 전환이 끝났다면 GIWA 선택을 유지한다.
+        if (requestId !== networkChangeRequestRef.current) return;
+        // provider 실제 체인이 target이면 지연된 Wagmi 값과 무관하게 성공 처리한다.
+        // 실패한 경우에만 확인된 실제 체인(또는 전환 전 선택)으로 UI를 되돌린다.
         const rejected = isWalletSwitchRejectedError(error);
-        const providerChainId = rejected && chainId != null
-          ? chainId
-          : await readProviderChainId(1500);
+        const providerChainId = await readProviderChainId(1500);
         if (providerChainId === targetChainId) {
           selectedNetworkRef.current = network;
+          networkIntentChainIdRef.current = targetChainId;
           setSelectedNetwork(network);
           toast.success(t('toast.networkSwitched', { name: network.name }));
           return;
         }
 
-        const actual = SUPPORTED_NETWORKS.find(n => n.chainId === providerChainId);
+        const actualChainId = providerChainId ?? chainId;
+        const actual = SUPPORTED_NETWORKS.find(n => n.chainId === actualChainId);
         if (actual) {
           selectedNetworkRef.current = actual;
           networkIntentChainIdRef.current = actual.chainId as SupportedChainId;
           setSelectedNetwork(actual);
+        } else {
+          selectedNetworkRef.current = previousNetwork;
+          networkIntentChainIdRef.current = previousNetwork.chainId as SupportedChainId;
+          setSelectedNetwork(previousNetwork);
         }
         toast.error(
           rejected
@@ -315,7 +366,12 @@ export function GaslessApp() {
               : t('toast.networkSwitchFailed')
         );
       } finally {
-        if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
+        if (
+          isCapacitorNativeApp() &&
+          requestId === networkChangeRequestRef.current
+        ) {
+          setWalletLinkingFlag(false);
+        }
       }
     },
     [t, isConnected, chainId, selectedNetwork.chainId]
@@ -337,6 +393,33 @@ export function GaslessApp() {
     const targetChainId = pendingTransaction.chainId;
     networkIntentChainIdRef.current = targetChainId;
 
+    const completeSponsoredTransfer = (txHash: string) => {
+      const newCount = getFreeTransactionsUsed() + 1;
+      const today = new Date().toDateString();
+      localStorage.setItem('adGas_usage', JSON.stringify({ date: today, count: newCount }));
+      setFreeTransactionsUsed(newCount);
+      setTransactions(prev => [
+        {
+          hash: txHash,
+          to: pendingTransaction.to,
+          amount: pendingTransaction.amount,
+          tokenSymbol: pendingTransaction.token.symbol,
+          networkName: pendingTransaction.network.name,
+          chainId: targetChainId,
+          timestamp: Date.now(),
+        },
+        ...prev,
+      ]);
+      setShowTransactionModal(false);
+      setTxStatusMessage(undefined);
+      setCompletedTxHash(txHash);
+      setCompletedTxChainId(targetChainId);
+      setShowCompleteModal(true);
+      setRecipientAddress('');
+      setAmount('0.0001');
+      setPendingTransaction(null);
+    };
+
     setIsTransacting(true);
 
     if (isCapacitorNativeApp()) beginWalletTxSigning();
@@ -356,6 +439,73 @@ export function GaslessApp() {
       const { publicClient: activePublicClient } = clients;
       const signingConnector = getCapacitorPreferredConnector(wagmiConfig.connectors);
       setTxStatusMessage(t('txModal.preparingTransfer'));
+
+      // 체인별 지원 토큰 (ERC20)
+      const tokenDef = findChainToken(targetChainId, pendingTransaction.token.symbol);
+      if (!tokenDef) {
+        throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
+      }
+      const tokenAddress = tokenDef.address;
+      const amountUnits = parseUnits(pendingTransaction.amount, tokenDef.decimals);
+
+      // EIP-3009 토큰은 토큰 컨트랙트가 authorization nonce를 온체인에서 직접 소비한다.
+      // 별도 AD-GAS allowance/nonce가 필요 없고, 최초 전송부터 한 번의 서명으로 완료된다.
+      if (tokenDef.authorization) {
+        const validAfter = Math.floor(Date.now() / 1000) - 60;
+        const validBefore = Math.floor(Date.now() / 1000) + 60 * 20;
+        const authorizationNonce = bytesToHex(
+          globalThis.crypto.getRandomValues(new Uint8Array(32))
+        );
+
+        setTxStatusMessage(t('txModal.authorizationSign'));
+        toast.info(t('txModal.authorizationSign'));
+        const authorizationSignature = await signTypedDataForTx({
+          account: address,
+          ...(signingConnector ? { connector: signingConnector } : {}),
+          domain: {
+            name: tokenDef.authorization.name,
+            version: tokenDef.authorization.version,
+            chainId: targetChainId,
+            verifyingContract: tokenAddress,
+          },
+          types: {
+            TransferWithAuthorization: [
+              { name: 'from', type: 'address' },
+              { name: 'to', type: 'address' },
+              { name: 'value', type: 'uint256' },
+              { name: 'validAfter', type: 'uint256' },
+              { name: 'validBefore', type: 'uint256' },
+              { name: 'nonce', type: 'bytes32' },
+            ],
+          },
+          primaryType: 'TransferWithAuthorization',
+          message: {
+            from: address,
+            to: pendingTransaction.to as `0x${string}`,
+            value: amountUnits,
+            validAfter: BigInt(validAfter),
+            validBefore: BigInt(validBefore),
+            nonce: authorizationNonce,
+          },
+        });
+
+        const authorizationPayload: SponsoredTransferRequest = {
+          from: address as `0x${string}`,
+          to: pendingTransaction.to as `0x${string}`,
+          amount: pendingTransaction.amount,
+          tokenSymbol: pendingTransaction.token.symbol,
+          chainId: targetChainId,
+          authorizationSignature,
+          authorizationNonce,
+          validAfter,
+          validBefore,
+        };
+        setTxStatusMessage(t('txModal.relayerSending'));
+        const sdk = new AdWalletRelayerSDK({ baseUrl: getRelayerApiBase() });
+        const { txHash } = await sdk.sendSponsoredTransfer(authorizationPayload);
+        completeSponsoredTransfer(txHash);
+        return;
+      }
 
       const contractAddress = getSponsoredTransferContractAddress(targetChainId);
       if (!contractAddress) {
@@ -401,21 +551,15 @@ export function GaslessApp() {
           functionName: 'nonces',
           args: [address],
         });
-      } catch (nonceError: any) {
+      } catch (nonceError: unknown) {
+        const nonceErrorMessage =
+          nonceError instanceof Error ? nonceError.message : String(nonceError);
         throw new Error(
           `컨트랙트에서 nonces 함수를 호출할 수 없습니다. ` +
             `주소 ${contractAddress}가 올바른 AdWalletSponsoredTransfer 컨트랙트인지 확인해주세요. ` +
-            `에러: ${nonceError?.message || String(nonceError)}`
+            `에러: ${nonceErrorMessage}`
         );
       }
-
-      // 체인별 지원 토큰 (ERC20)
-      const tokenDef = findChainToken(targetChainId, pendingTransaction.token.symbol);
-      if (!tokenDef) {
-        throw new Error('해당 체인에서 지원하지 않는 토큰입니다.');
-      }
-      const tokenAddress = tokenDef.address;
-      const amountUnits = parseUnits(pendingTransaction.amount, tokenDef.decimals);
 
       const permitConfig = tokenDef.permit;
       const supportsPermit = !!permitConfig;
@@ -473,17 +617,19 @@ export function GaslessApp() {
           } catch {
             /* 설정값 유지 */
           }
-          try {
-            const tokenVersion = await activePublicClient.readContract({
-              address: tokenAddress,
-              abi: permitVersionAbi,
-              functionName: 'version',
-              args: [],
-            });
-            if (typeof tokenVersion === 'string' && tokenVersion)
-              permitDomainVersion = tokenVersion;
-          } catch {
-            /* 설정값 유지 (일부 토큰은 version() 없음) */
+          if (permitConfig!.useOnchainVersion !== false) {
+            try {
+              const tokenVersion = await activePublicClient.readContract({
+                address: tokenAddress,
+                abi: permitVersionAbi,
+                functionName: 'version',
+                args: [],
+              });
+              if (typeof tokenVersion === 'string' && tokenVersion)
+                permitDomainVersion = tokenVersion;
+            } catch {
+              /* 설정값 유지 (일부 토큰은 version() 없음) */
+            }
           }
           permitSignature = await signTypedDataForTx({
             account: address,
@@ -594,59 +740,39 @@ export function GaslessApp() {
         tokenSymbol: pendingTransaction.token.symbol,
         chainId: targetChainId,
         signature,
-        nonce: Number(nonce),
+        nonce: nonce.toString(),
         ...(permitSignature && deadline !== undefined && { permitSignature, deadline }),
       });
       console.log('Sponsored transaction hash:', txHash);
-      const newCount = getFreeTransactionsUsed() + 1;
-      const today = new Date().toDateString();
-      localStorage.setItem('adGas_usage', JSON.stringify({ date: today, count: newCount }));
-      setFreeTransactionsUsed(newCount);
-      // 트랜잭션 히스토리에 추가 (최신 순으로 앞에 쌓기)
-      setTransactions(prev => [
-        {
-          hash: txHash,
-          to: pendingTransaction.to,
-          amount: pendingTransaction.amount,
-          tokenSymbol: pendingTransaction.token.symbol,
-          networkName: pendingTransaction.network.name,
-          chainId: targetChainId,
-          timestamp: Date.now(),
-        },
-        ...prev,
-      ]);
-
-      // 완료 모달 표시
-      setShowTransactionModal(false);
-      setTxStatusMessage(undefined);
-      setCompletedTxHash(txHash);
-      setCompletedTxChainId(targetChainId);
-      setShowCompleteModal(true);
-
-      // 입력 필드 초기화
-      setRecipientAddress('');
-      setAmount('0.0001');
-      setPendingTransaction(null);
-    } catch (err: any) {
+      completeSponsoredTransfer(txHash);
+    } catch (err: unknown) {
       // 더 상세한 에러 로깅
       console.error('[handleAdComplete Error] Raw error:', err);
       console.error('[handleAdComplete Error] Error type:', typeof err);
       console.error('[handleAdComplete Error] Error string:', String(err));
-      console.error(
-        '[handleAdComplete Error] Error JSON:',
-        JSON.stringify(err, Object.getOwnPropertyNames(err))
-      );
+      if (typeof err === 'object' && err !== null) {
+        console.error(
+          '[handleAdComplete Error] Error JSON:',
+          JSON.stringify(err, Object.getOwnPropertyNames(err))
+        );
+      }
 
       let errorMessage = t('errors.unknown');
       if (err instanceof Error) {
         errorMessage = err.message;
       } else if (typeof err === 'string') {
         errorMessage = err;
-      } else if (err?.message) {
-        errorMessage = err.message;
-      } else if (err?.error) {
-        errorMessage =
-          typeof err.error === 'string' ? err.error : err.error?.message || String(err.error);
+      } else if (typeof err === 'object' && err !== null) {
+        const record = err as { message?: unknown; error?: unknown };
+        if (typeof record.message === 'string') {
+          errorMessage = record.message;
+        } else if (typeof record.error === 'string') {
+          errorMessage = record.error;
+        } else if (record.error instanceof Error) {
+          errorMessage = record.error.message;
+        } else if (record.error !== undefined) {
+          errorMessage = String(record.error);
+        }
       } else {
         errorMessage = JSON.stringify(err) || t('errors.unknown');
       }
@@ -676,13 +802,18 @@ export function GaslessApp() {
     toast.info(t('toast.adCancelled'));
   }, []);
 
-  const handleSendClick = useCallback(() => {
+  const handleSendClick = useCallback(async () => {
+    if (isPreparingSend) return;
     if (!isConnected) {
       toast.error(t('toast.connectFirst'));
       return;
     }
     if (!recipientAddress.trim() || !amount) {
       toast.error(t('toast.fillAll'));
+      return;
+    }
+    if (!isAddress(recipientAddress.trim())) {
+      toast.error(t('toast.invalidRecipientAddress'));
       return;
     }
     if (parseFloat(amount) <= 0) {
@@ -712,7 +843,42 @@ export function GaslessApp() {
     const targetToken = selectedToken;
     networkIntentChainIdRef.current = targetChainId;
 
-    // 클릭 이벤트 안에서 광고 모달을 즉시 마운트해 웹 광고의 사용자 제스처도 유지한다.
+    // 광고를 먼저 재생한 뒤 서명에서 체인 불일치를 발견하면 사용자가 광고만 보게 된다.
+    // MetaMask SDK의 실제 activeChain이 선택 체인과 일치한 뒤에만 광고를 시작한다.
+    setIsPreparingSend(true);
+    try {
+      await ensureWalletOnChain(targetChainId);
+      await verifyWalletOnChain(targetChainId);
+
+      const tokenDef = findChainToken(targetChainId, targetToken.symbol);
+      if (tokenDef?.recipientVerification === 'giwa-dojang') {
+        if (targetChainId !== 91342) throw new Error(t('errors.network'));
+        const publicClient = getPublicClient(wagmiConfig, { chainId: 91342 });
+        if (!publicClient) throw new Error(t('errors.network'));
+
+        const recipientVerified = await isGiwaDojangRecipientVerified(
+          publicClient,
+          tokenDef.address,
+          recipientAddress.trim() as `0x${string}`
+        );
+        if (!recipientVerified) {
+          throw new Error(t('errors.giwaRecipientNotVerified'));
+        }
+      }
+    } catch (error) {
+      toast.error(
+        isWalletSwitchRejectedError(error)
+          ? t('toast.networkSwitchRejected', { name: targetNetwork.name })
+          : error instanceof Error && error.message
+            ? error.message
+            : t('toast.networkSwitchFailed')
+      );
+      return;
+    } finally {
+      setIsPreparingSend(false);
+      if (isCapacitorNativeApp()) setWalletLinkingFlag(false);
+    }
+
     flushSync(() => {
       setUserError(null);
       setPendingTransaction({
@@ -726,6 +892,7 @@ export function GaslessApp() {
     });
   }, [
     isConnected,
+    isPreparingSend,
     recipientAddress,
     amount,
     selectedToken,
@@ -790,6 +957,7 @@ export function GaslessApp() {
           connect={connect}
           reset={resetConnect}
           isPending={isConnectPending}
+          accountStatus={accountStatus}
           targetChainId={selectedNetwork.chainId as SupportedChainId}
         />
         <Toaster />
@@ -824,7 +992,7 @@ export function GaslessApp() {
             onAmountChange={setAmount}
             availableTokens={availableTokens}
             onSendClick={handleSendClick}
-            isPreparing={false}
+            isPreparing={isPreparingSend}
           />
         </main>
         <footer className="px-5 pb-8 text-center">
@@ -929,7 +1097,7 @@ export function GaslessApp() {
                 availableTokens={availableTokens}
                 selectedNetwork={selectedNetwork}
                 onSendClick={handleSendClick}
-                isPreparing={false}
+                isPreparing={isPreparingSend}
                 onCancelClick={() => {
                   setRecipientAddress('');
                   setAmount('0.0001');
@@ -1025,6 +1193,7 @@ export function GaslessApp() {
         connect={connect}
         reset={resetConnect}
         isPending={isConnectPending}
+        accountStatus={accountStatus}
         targetChainId={selectedNetwork.chainId as SupportedChainId}
       />
       <AdModal

@@ -88,15 +88,13 @@ async function tryBuildClients(
   const publicClient = getPublicClient(config, { chainId });
   if (!publicClient) return null;
 
-  // chainId 강제 없이 — connector 실제 체인 기준 (불일치 시 silent fail 방지)
+  // connector가 이전 체인(Base 등)을 캐시한 상태라면 target client로 사용하지 않는다.
   try {
     const client = await getConnectorClient(config, { account: accountAddress });
-    const resolvedChainId = (client.chain?.id ?? chainId) as SupportedChainId;
-    const pc = getPublicClient(config, { chainId: resolvedChainId });
-    if (pc) {
+    if (client.chain?.id === chainId) {
       return {
         walletClient: client as unknown as WalletClient,
-        publicClient: pc as unknown as PublicClient,
+        publicClient: publicClient as unknown as PublicClient,
       };
     }
   } catch {
@@ -105,10 +103,12 @@ async function tryBuildClients(
 
   try {
     const client = await getConnectorClient(config, { chainId, account: accountAddress });
-    return {
-      walletClient: client as unknown as WalletClient,
-      publicClient: publicClient as unknown as PublicClient,
-    };
+    if (client.chain?.id === chainId) {
+      return {
+        walletClient: client as unknown as WalletClient,
+        publicClient: publicClient as unknown as PublicClient,
+      };
+    }
   } catch {
     /* fall through */
   }

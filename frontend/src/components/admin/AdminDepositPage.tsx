@@ -12,7 +12,7 @@ import { getWalletClient, getPublicClient } from '@wagmi/core';
 import { config } from '@/wagmi.config';
 import { parseEther, formatEther } from 'viem';
 import { toast } from 'sonner';
-import { injected } from 'wagmi/connectors';
+import { injected } from '@wagmi/connectors/injected';
 import { useLocale } from '@/contexts/LocaleContext';
 
 // Admin 예치 지원 체인
@@ -204,17 +204,22 @@ export function AdminDepositPage() {
     // 3. 현재 연결 해제
     try {
       disconnect();
-    } catch (e) {
+    } catch {
       // ignore
     }
 
     // 4. MetaMask: 권한 해제 시도 (지원하는 클라이언트만 동작)
-    if (window.ethereum?.request) {
-      window.ethereum
+    const ethereum = (window as Window & {
+      ethereum?: {
+        request?: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+      };
+    }).ethereum;
+    if (ethereum?.request) {
+      ethereum
         .request({
           method: 'wallet_revokePermissions',
           params: [{ eth_accounts: {} }],
-        } as any)
+        })
         .catch(() => {});
     }
 
@@ -270,7 +275,10 @@ export function AdminDepositPage() {
       let msg = '예치에 실패했습니다.';
       if (err instanceof Error && typeof err.message === 'string') msg = err.message;
       else if (typeof err === 'string') msg = err;
-      else if (err && typeof err === 'object' && 'shortMessage' in err && typeof (err as any).shortMessage === 'string') msg = (err as any).shortMessage;
+      else if (err && typeof err === 'object' && 'shortMessage' in err) {
+        const shortMessage = (err as { shortMessage?: unknown }).shortMessage;
+        if (typeof shortMessage === 'string') msg = shortMessage;
+      }
       toast.error(msg);
       console.error('Deposit error:', err);
     } finally {
@@ -334,7 +342,10 @@ export function AdminDepositPage() {
       let msg = '출금에 실패했습니다.';
       if (err instanceof Error && typeof err.message === 'string') msg = err.message;
       else if (typeof err === 'string') msg = err;
-      else if (err && typeof err === 'object' && 'shortMessage' in err && typeof (err as any).shortMessage === 'string') msg = (err as any).shortMessage;
+      else if (err && typeof err === 'object' && 'shortMessage' in err) {
+        const shortMessage = (err as { shortMessage?: unknown }).shortMessage;
+        if (typeof shortMessage === 'string') msg = shortMessage;
+      }
       toast.error(msg);
       console.error('Withdraw error:', err);
     } finally {

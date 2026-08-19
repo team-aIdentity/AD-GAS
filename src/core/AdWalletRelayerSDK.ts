@@ -10,13 +10,22 @@ export interface SponsoredTransferRequest {
   tokenSymbol: SupportedTokenSymbol;
   chainId: number;
   signature?: string; // EIP-712 서명 (메타트랜잭션용)
-  nonce?: number; // 사용자 nonce (메타트랜잭션용)
+  nonce?: string | number; // 사용자 nonce (큰 값 정밀도 보존을 위해 문자열 권장)
   permitSignature?: string; // EIP-2612 Permit 서명 (가스리스 approve)
   deadline?: number; // Permit 만료 시간 (unix timestamp)
+  authorizationSignature?: string; // EIP-3009 TransferWithAuthorization 서명
+  authorizationNonce?: `0x${string}`; // 토큰 컨트랙트가 온체인에서 소비하는 bytes32 nonce
+  validAfter?: number; // EIP-3009 유효 시작 시간
+  validBefore?: number; // EIP-3009 만료 시간
 }
 
 export interface SponsoredTransferResponse {
   txHash: string;
+}
+
+interface RelayerErrorResponse {
+  code?: string;
+  error?: string;
 }
 
 interface RelayerSdkConfig {
@@ -61,8 +70,10 @@ export class AdWalletRelayerSDK {
     if (!res.ok) {
       let message = '스폰서 전송에 실패했습니다.';
       try {
-        const data = await res.json();
-        if (data?.error) message = data.error;
+        const data = (await res.json()) as RelayerErrorResponse;
+        if (typeof data?.error === 'string' && data.error.trim()) {
+          message = data.error;
+        }
       } catch {
         // ignore JSON parse error
       }
@@ -76,4 +87,3 @@ export class AdWalletRelayerSDK {
     return data;
   }
 }
-

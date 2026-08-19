@@ -11,6 +11,8 @@ export type Network = {
 
 export type TokenCategory = 'stablecoin' | 'token';
 
+export type TokenSponsorshipMode = 'eip3009' | 'eip2612' | 'approval';
+
 export type Token = {
   symbol: string;
   name: string;
@@ -18,4 +20,5 @@ export type Token = {
   decimals: number;
   usdPrice?: number;
   category: TokenCategory;
+  sponsorshipMode: TokenSponsorshipMode;
 };

@@ -13,11 +13,7 @@ import {
   orderConnectorsForEnvironment,
 } from '@/lib/walletConnectEnvironment';
 import { setWalletLinkingFlag } from '@/components/CapacitorWalletBootstrap';
-import {
-  ensureWalletOnChain,
-  isWalletSwitchRejectedError,
-  type SupportedChainId,
-} from '@/lib/ensureWalletChain';
+import { type SupportedChainId } from '@/lib/ensureWalletChain';
 
 type ConnectFn = UseConnectReturnType<typeof config>['connect'];
 
@@ -28,6 +24,7 @@ interface WalletConnectModalProps {
   connect: ConnectFn;
   reset: () => void;
   isPending: boolean;
+  accountStatus: 'connecting' | 'reconnecting' | 'connected' | 'disconnected';
   targetChainId: SupportedChainId;
 }
 
@@ -37,6 +34,30 @@ function isAlreadyConnectedError(error: unknown): boolean {
     (error as Error)?.message ??
     '';
   return /connector\s+already\s+connected|already\s+connected/i.test(message);
+}
+
+function isConnectionInProgressError(error: unknown): boolean {
+  const message =
+    (error as { shortMessage?: string })?.shortMessage ??
+    (error as Error)?.message ??
+    '';
+  return /cannot connect when state is connecting|state is connecting/i.test(message);
+}
+
+async function waitForAuthorization(
+  connector: Connector,
+  maxMs = 15000
+): Promise<boolean> {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    try {
+      if (await connector.isAuthorized()) return true;
+    } catch {
+      // MetaMask 복귀 메시지가 도착할 때까지 계속 기다린다.
+    }
+    await new Promise(resolve => window.setTimeout(resolve, 500));
+  }
+  return false;
 }
 
 /**
@@ -49,6 +70,7 @@ export function WalletConnectModal({
   connect,
   reset,
   isPending,
+  accountStatus,
   targetChainId,
 }: WalletConnectModalProps) {
   const { t } = useLocale();
@@ -72,23 +94,14 @@ export function WalletConnectModal({
     setIsStarting(false);
   }, [open]);
 
-  const finishConnected = async () => {
-    try {
-      await ensureWalletOnChain(targetChainId);
-    } catch (error) {
-      toast.error(
-        isWalletSwitchRejectedError(error)
-          ? t('toast.networkSwitchRejectedGeneric')
-          : error instanceof Error && error.message
-            ? error.message
-            : t('toast.networkSwitchFailed')
-      );
-    } finally {
-      startingRef.current = false;
-      setIsStarting(false);
-      setWalletLinkingFlag(false);
-      onClose();
-    }
+  const finishConnected = () => {
+    // 연결 성공과 네트워크 전환은 서로 다른 사용자 동작이다.
+    // 여기서 체인 전환까지 기다리면 MetaMask 연결은 끝났는데 모달만 계속 남는다.
+    reset();
+    startingRef.current = false;
+    setIsStarting(false);
+    setWalletLinkingFlag(false);
+    onClose();
   };
 
   const tryRestoreConnection = async (connector: Connector): Promise<boolean> => {
@@ -101,14 +114,19 @@ export function WalletConnectModal({
   };
 
   const startConnect = async (connector: Connector) => {
-    if (startingRef.current || isPending) return;
+    if (
+      startingRef.current ||
+      isPending ||
+      accountStatus === 'connecting' ||
+      accountStatus === 'reconnecting'
+    ) return;
     startingRef.current = true;
     setIsStarting(true);
     if (nativeApp) setWalletLinkingFlag(true);
 
     try {
       if ((await connector.isAuthorized()) && (await tryRestoreConnection(connector))) {
-        await finishConnected();
+        finishConnected();
         return;
       }
     } catch {
@@ -119,15 +137,18 @@ export function WalletConnectModal({
       { connector, chainId: targetChainId },
       {
         onSuccess: () => {
-          void finishConnected();
+          finishConnected();
         },
         onError: err => {
           void (async () => {
             // MetaMask SDK 세션은 살아 있지만 Wagmi 상태만 끊긴 경우에는
             // 두 번째 connect 대신 기존 승인 세션을 다시 등록한다.
-            if (isAlreadyConnectedError(err) && (await tryRestoreConnection(connector))) {
-              await finishConnected();
-              return;
+            if (isAlreadyConnectedError(err) || isConnectionInProgressError(err)) {
+              const authorized = await waitForAuthorization(connector);
+              if (authorized && (await tryRestoreConnection(connector))) {
+                finishConnected();
+                return;
+              }
             }
 
             startingRef.current = false;
@@ -138,7 +159,11 @@ export function WalletConnectModal({
               (err as { shortMessage?: string })?.shortMessage ??
               (err as Error)?.message ??
               t('errors.generic');
-            toast.error(msg);
+            toast.error(
+              /transport request timed out|transport.*timeout/i.test(msg)
+                ? t('errors.walletTransportTimeout')
+                : msg
+            );
           })();
         },
       }
@@ -155,7 +180,12 @@ export function WalletConnectModal({
     onClose();
   };
 
-  const nativeConnecting = nativeApp && (isPending || isStarting);
+  const connectionBusy =
+    isPending ||
+    isStarting ||
+    accountStatus === 'connecting' ||
+    accountStatus === 'reconnecting';
+  const nativeConnecting = nativeApp && connectionBusy;
 
   return createPortal(
     <div
@@ -187,7 +217,7 @@ export function WalletConnectModal({
                 <button
                   key={connector.uid}
                   type="button"
-                  disabled={isPending || isStarting}
+                  disabled={connectionBusy}
                   onClick={() => void startConnect(connector)}
                   className="w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] px-4 py-3 text-left font-medium text-white transition-colors hover:bg-[rgba(99,102,241,0.13)] disabled:opacity-50"
                 >

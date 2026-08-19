@@ -5,7 +5,10 @@ export type { TokenCategory };
 // 체인별 지원 토큰 정의.
 // - category: 'stablecoin' | 'token' (UI에서 그룹 구분)
 // - permit: EIP-2612 도메인(name/version). 지정 시 가스리스(Permit) 서명, 미지정 시 approve 폴백.
-//   서명 시 GaslessApp이 온체인 name()/version()을 우선 읽고, 실패하면 이 값을 폴백으로 사용.
+//   기본적으로 온체인 name()/version()을 우선 읽는다. version()이 앱/구현 버전이고
+//   EIP-712 도메인 버전과 다른 토큰은 useOnchainVersion=false로 설정값을 고정한다.
+// - authorization: EIP-3009 도메인(name/version). 토큰 자체의 온체인 authorization nonce로
+//   최초 approve 없이 한 번의 서명만으로 transferWithAuthorization을 실행한다.
 // - usdPrice: 스테이블코인만 1로 표기. 일반 토큰은 생략(USD 환산 표시 안 함).
 export interface TokenDef {
   symbol: string;
@@ -14,7 +17,10 @@ export interface TokenDef {
   decimals: number;
   category: TokenCategory;
   usdPrice?: number;
-  permit?: { name: string; version: string };
+  permit?: { name: string; version: string; useOnchainVersion?: boolean };
+  authorization?: { name: string; version: string };
+  /** 토큰 자체가 수신자 자격을 제한하는 경우 전송 전 검증 방식 */
+  recipientVerification?: 'giwa-dojang';
 }
 
 function parseOptionalTokenAddr(raw: string | undefined): `0x${string}` | undefined {
@@ -36,6 +42,7 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
       category: 'stablecoin',
       usdPrice: 1,
       permit: { name: 'USD Coin', version: '2' },
+      authorization: { name: 'USD Coin', version: '2' },
     },
     {
       symbol: 'USDT',
@@ -80,6 +87,7 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
       category: 'stablecoin',
       usdPrice: 1,
       permit: { name: 'USD Coin', version: '2' },
+      authorization: { name: 'USD Coin', version: '2' },
     },
     {
       symbol: 'USDT',
@@ -99,7 +107,6 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
       decimals: 18,
       category: 'stablecoin',
       usdPrice: 1,
-      permit: { name: 'USD Coin', version: '2' },
     },
     {
       symbol: 'USDT',
@@ -125,6 +132,8 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
       address: '0xBCdB22f56642DE57624CfC2fBb9eE398cF3CA268',
       decimals: 18,
       category: 'token',
+      // TestTokenV2는 일반 transfer/transferFrom 모두 Dojang 검증 수신자만 허용한다.
+      recipientVerification: 'giwa-dojang',
     },
     {
       symbol: 'FAUCET',
@@ -132,6 +141,8 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
       address: '0xB11E5c9070a57C0c33Df102436C440a2c73a4c38',
       decimals: 18,
       category: 'token',
+      // 온체인 version()은 1.4.0-beta.5지만 DOMAIN_SEPARATOR는 version="1"을 사용한다.
+      permit: { name: 'FaucetToken', version: '1', useOnchainVersion: false },
     },
   ],
 };
@@ -139,10 +150,17 @@ const STATIC_CHAIN_TOKENS: Record<number, TokenDef[]> = {
 // GIWA Sepolia: 공식 문서에 표준 스테이블 주소가 없어 USDC/USDT는 선택적 환경 변수로 설정
 const giwaSepoliaUsdc = parseOptionalTokenAddr(process.env.NEXT_PUBLIC_GIWA_SEPOLIA_USDC);
 const giwaSepoliaUsdt = parseOptionalTokenAddr(process.env.NEXT_PUBLIC_GIWA_SEPOLIA_USDT);
+const giwaSepoliaUsdcAuthMode = process.env.NEXT_PUBLIC_GIWA_SEPOLIA_USDC_AUTH_MODE?.trim().toLowerCase();
 
 function buildGiwaTokens(): TokenDef[] {
   const tokens: TokenDef[] = [];
   if (giwaSepoliaUsdc) {
+    const permit = giwaSepoliaUsdcAuthMode === 'eip2612'
+      ? { name: 'USD Coin', version: '2' }
+      : undefined;
+    const authorization = giwaSepoliaUsdcAuthMode === 'eip3009'
+      ? { name: 'USD Coin', version: '2' }
+      : undefined;
     tokens.push({
       symbol: 'USDC',
       name: 'USD Coin',
@@ -150,7 +168,8 @@ function buildGiwaTokens(): TokenDef[] {
       decimals: 6,
       category: 'stablecoin',
       usdPrice: 1,
-      permit: { name: 'USD Coin', version: '2' },
+      ...(permit ? { permit } : {}),
+      ...(authorization ? { authorization } : {}),
     });
   }
   if (giwaSepoliaUsdt) {
@@ -187,6 +206,7 @@ export function tokenDefToUiToken(def: TokenDef, balance = 0): Token {
     decimals: def.decimals,
     usdPrice: def.usdPrice,
     category: def.category,
+    sponsorshipMode: def.authorization ? 'eip3009' : def.permit ? 'eip2612' : 'approval',
   };
 }
 
