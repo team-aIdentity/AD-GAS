@@ -55,6 +55,7 @@ function normalizeTimestampMs(raw: string): number {
 async function verifyCallback(rawQuery: string): Promise<{
   challengeId: string | null;
   transactionId: string;
+  adUnit: string;
 }> {
   const signatureMarker = '&signature=';
   const signatureIndex = rawQuery.lastIndexOf(signatureMarker);
@@ -71,14 +72,6 @@ async function verifyCallback(rawQuery: string): Promise<{
   const adUnit = parameters.get('ad_unit');
   if (!signature || !keyId || !transactionId || !timestamp || !adUnit) {
     throw new Error('AdMob SSV 필수 파라미터가 누락되었습니다.');
-  }
-
-  const expectedAdUnit = (process.env.ADMOB_SSV_AD_UNIT_ID || '3951197726').trim();
-  const expectedSuffix = expectedAdUnit.includes('/')
-    ? expectedAdUnit.slice(expectedAdUnit.lastIndexOf('/') + 1)
-    : expectedAdUnit;
-  if (adUnit !== expectedAdUnit && adUnit !== expectedSuffix) {
-    throw new Error('허용되지 않은 AdMob 광고 단위입니다.');
   }
 
   const timestampMs = normalizeTimestampMs(timestamp);
@@ -102,7 +95,15 @@ async function verifyCallback(rawQuery: string): Promise<{
     decodeBase64Url(signature)
   );
   if (!valid) throw new Error('AdMob SSV 서명이 올바르지 않습니다.');
-  return { challengeId, transactionId };
+  return { challengeId, transactionId, adUnit };
+}
+
+function isExpectedAdUnit(adUnit: string): boolean {
+  const expectedAdUnit = (process.env.ADMOB_SSV_AD_UNIT_ID || '3951197726').trim();
+  const expectedSuffix = expectedAdUnit.includes('/')
+    ? expectedAdUnit.slice(expectedAdUnit.lastIndexOf('/') + 1)
+    : expectedAdUnit;
+  return adUnit === expectedAdUnit || adUnit === expectedSuffix;
 }
 
 export async function GET(request: NextRequest) {
@@ -112,11 +113,19 @@ export async function GET(request: NextRequest) {
   try {
     const queryIndex = request.url.indexOf('?');
     const rawQuery = queryIndex >= 0 ? request.url.slice(queryIndex + 1) : '';
+    // AdMob URL 등록 단계의 단순 연결 확인은 보상을 발급하지 않는 health check로 처리한다.
+    // 실제 콜백은 query parameter가 있으므로 아래의 서명 검증을 반드시 거친다.
+    if (!rawQuery) {
+      return NextResponse.json({ ok: true, health: 'admob-ssv' });
+    }
     const verified = await verifyCallback(rawQuery);
     // AdMob 콘솔 URL 테스트 등 custom_data가 없는 정상 서명 callback은 승인만 하고
     // 보상 challenge는 변경하지 않는다.
     if (!verified.challengeId) {
       return NextResponse.json({ ok: true, accepted: false, reason: 'missing_custom_data' });
+    }
+    if (!isExpectedAdUnit(verified.adUnit)) {
+      throw new Error('허용되지 않은 AdMob 광고 단위입니다.');
     }
     try {
       await markAdRewardChallengeVerified({
