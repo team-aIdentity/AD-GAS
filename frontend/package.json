@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "build:mobile": "bash scripts/build-mobile-export.sh",
+    "build:mobile:release": "NEXT_PUBLIC_ADMOB_USE_TEST_ADS=false bash scripts/build-mobile-export.sh",
     "start": "next start",
     "lint": "eslint"
   },

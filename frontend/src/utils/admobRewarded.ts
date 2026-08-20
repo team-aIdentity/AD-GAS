@@ -4,9 +4,11 @@ import { RewardAdPluginEvents } from '@capacitor-community/admob';
 import { isCapacitorNativeApp } from './capacitorNative';
 
 const ANDROID_REWARDED_TEST_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
+const ANDROID_REWARDED_PRODUCTION_AD_UNIT_ID = 'ca-app-pub-1201899929581374/3951197726';
 let initializationPromise: Promise<void> | null = null;
 let preparationPromise: Promise<void> | null = null;
-let preparedAdId: string | null = null;
+let preparationKey: string | null = null;
+let preparedAdKey: string | null = null;
 
 function shouldUseTestAds(): boolean {
   return process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
@@ -21,7 +23,9 @@ function pickRewardAdUnitId(): string | undefined {
   const platform = Capacitor.getPlatform();
   if (platform === 'ios') return ios || fallback;
   if (platform === 'android') {
-    return android || fallback || (shouldUseTestAds() ? ANDROID_REWARDED_TEST_AD_UNIT_ID : undefined);
+    // 개발 중 실광고 노출·클릭으로 인한 무효 트래픽을 막기 위해 테스트 모드를 최우선한다.
+    if (shouldUseTestAds()) return ANDROID_REWARDED_TEST_AD_UNIT_ID;
+    return android || fallback || ANDROID_REWARDED_PRODUCTION_AD_UNIT_ID;
   }
   return fallback;
 }
@@ -59,6 +63,13 @@ export function isAdMobRewardedConfigured(): boolean {
 export type ShowAdMobRewardedOptions = {
   /** 네이티브 전면 광고 직전 — WebView 위 레이어를 가리지 않도록 UI 숨김 */
   onBeforeAdSurface?: () => void;
+  /** AdMob SSV callback의 custom_data로 전달할 서버 발급 1회용 challenge */
+  ssvCustomData?: string;
+};
+
+export type PreloadAdMobRewardedOptions = Pick<ShowAdMobRewardedOptions, 'ssvCustomData'> & {
+  /** show 직전 호출에서만 true. 앱 시작 시 SSV 없는 운영 광고 preload를 막기 위한 내부 옵션 */
+  allowWithoutSsv?: boolean;
 };
 
 function withAdTimeout<T>(promise: Promise<T>, maxMs: number, message: string): Promise<T> {
@@ -78,13 +89,26 @@ function withAdTimeout<T>(promise: Promise<T>, maxMs: number, message: string): 
 }
 
 /** 앱 진입 시 미리 광고를 준비해 전송 버튼에서의 대기 시간을 줄인다. */
-export async function preloadAdMobRewarded(): Promise<void> {
+export async function preloadAdMobRewarded(
+  options: PreloadAdMobRewardedOptions = {}
+): Promise<void> {
   if (!isCapacitorNativeApp()) return;
   const adId = pickRewardAdUnitId();
   if (!adId) throw new Error('리워드 광고 단위가 설정되어 있지 않습니다.');
-  if (preparedAdId === adId) return;
-  if (preparationPromise) return preparationPromise;
 
+  // 운영 광고는 challenge를 발급받기 전 미리 로드하면 SSV custom_data를 넣을 수 없다.
+  // 테스트 광고는 SSV callback을 보내지 않으므로 앱 진입 시 일반 preload를 허용한다.
+  if (!shouldUseTestAds() && !options.ssvCustomData && !options.allowWithoutSsv) {
+    await withAdTimeout(initializeAdMobRewarded(), 10000, 'AdMob 초기화 시간이 초과되었습니다.');
+    return;
+  }
+
+  const key = `${adId}:${options.ssvCustomData || 'no-ssv'}`;
+  if (preparedAdKey === key) return;
+  if (preparationPromise && preparationKey === key) return preparationPromise;
+  if (preparationPromise) await preparationPromise;
+
+  preparationKey = key;
   preparationPromise = (async () => {
     await withAdTimeout(initializeAdMobRewarded(), 10000, 'AdMob 초기화 시간이 초과되었습니다.');
     const { AdMob } = await import('@capacitor-community/admob');
@@ -92,13 +116,17 @@ export async function preloadAdMobRewarded(): Promise<void> {
       AdMob.prepareRewardVideoAd({
         adId,
         isTesting: shouldUseTestAds(),
+        ...(options.ssvCustomData
+          ? { ssv: { customData: options.ssvCustomData } }
+          : {}),
       }),
       20000,
       '리워드 광고 준비 시간이 초과되었습니다. 네트워크 연결을 확인해주세요.'
     );
-    preparedAdId = adId;
+    preparedAdKey = key;
   })().finally(() => {
     preparationPromise = null;
+    preparationKey = null;
   });
 
   return preparationPromise;
@@ -143,10 +171,13 @@ export async function showAdMobRewardedVideo(options?: ShowAdMobRewardedOptions)
     );
   }
 
-  await preloadAdMobRewarded();
+  await preloadAdMobRewarded({
+    ssvCustomData: options?.ssvCustomData,
+    allowWithoutSsv: true,
+  });
 
   const { AdMob } = await import('@capacitor-community/admob');
-  preparedAdId = null;
+  preparedAdKey = null;
 
   return new Promise((resolve, reject) => {
     let rewarded = false;

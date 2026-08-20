@@ -8,6 +8,8 @@ import { isCapacitorNativeApp } from '../utils/capacitorNative';
 export type RewardedAdShowOptions = {
   /** GPT display / AdMob show 직전 — 전체화면 광고가 모달에 가리지 않도록 */
   onAdSurfaceReady?: () => void;
+  /** 네이티브 AdMob SSV callback에 실을 서버 발급 1회용 challenge */
+  ssvCustomData?: string;
 };
 
 /**
@@ -43,7 +45,10 @@ export function useGoogleRewardedAd() {
     setError(null);
 
     const run = isCapacitorNativeApp()
-      ? showAdMobRewardedVideo({ onBeforeAdSurface: opts?.onAdSurfaceReady })
+      ? showAdMobRewardedVideo({
+          onBeforeAdSurface: opts?.onAdSurfaceReady,
+          ssvCustomData: opts?.ssvCustomData,
+        })
       : webSlot
         ? showGoogleRewardedAd(webSlot, {
             onBeforeDisplay: opts?.onAdSurfaceReady,

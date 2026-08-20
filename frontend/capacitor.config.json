@@ -7,7 +7,7 @@
       "launchShowDuration": 0
     },
     "AdMob": {
-      "initializeForTesting": true
+      "initializeForTesting": false
     }
   }
 }

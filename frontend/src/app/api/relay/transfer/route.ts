@@ -13,6 +13,12 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { findChainToken } from '@/lib/tokens';
 import { giwaSepolia } from '@/lib/chains/giwaSepolia';
 import { isGiwaDojangRecipientVerified } from '@/lib/giwaDojang';
+import {
+  AdRewardSecurityError,
+  assertVerifiedAdRewardChallenge,
+  authorizeSponsoredTransfer,
+  isAdRewardSecurityRequired,
+} from '@/lib/adRewardSecurity';
 
 export async function OPTIONS() {
   return NextResponse.json(
@@ -124,6 +130,7 @@ interface RelayBody {
   authorizationNonce?: `0x${string}`; // 토큰 컨트랙트가 소비하는 nonce
   validAfter?: number;
   validBefore?: number;
+  adChallengeId?: string;
 }
 
 // 메모리 기반 1일 10회 제한 (from 주소 기준)
@@ -142,6 +149,32 @@ function checkAndIncreaseDailyLimit(from: string) {
     throw new Error(`오늘 무료 전송 한도(${DAILY_LIMIT}회)를 모두 사용했습니다.`);
   }
   dailyUsage.set(key, { ...current, count: current.count + 1 });
+}
+
+async function authorizeRelayGasSponsorship(input: {
+  adChallengeId?: string;
+  from: string;
+  to: string;
+  amountUnits: bigint;
+  tokenSymbol: string;
+  chainId: number;
+}) {
+  if (!isAdRewardSecurityRequired()) {
+    // 로컬 개발·테스트 광고 모드에서만 사용하는 인스턴스 메모리 폴백.
+    checkAndIncreaseDailyLimit(input.from);
+    return;
+  }
+  await authorizeSponsoredTransfer(
+    input.adChallengeId,
+    {
+      from: input.from,
+      to: input.to,
+      amountUnits: input.amountUnits.toString(),
+      tokenSymbol: input.tokenSymbol,
+      chainId: input.chainId,
+    },
+    input.from
+  );
 }
 
 function contractEnvSuffix(chainId: SupportedChainId): string {
@@ -267,6 +300,7 @@ export async function POST(req: NextRequest) {
       authorizationNonce,
       validAfter,
       validBefore,
+      adChallengeId,
     } = body;
 
     if (!from || !to || !amount || !tokenSymbol || !chainId) {
@@ -324,15 +358,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { chain, rpcUrl } = getChainConfig(chainId);
-    const sponsorPk = getSponsorPrivateKey(chainId);
-    const account = privateKeyToAccount(sponsorPk);
-
-    const publicClient = createPublicClient({
-      chain,
-      transport: http(rpcUrl),
-    });
-
     // 체인별 지원 토큰 해석 (ERC20, 네이티브 토큰 제외)
     const tokenDef = findChainToken(chainId, tokenSymbol);
     if (!tokenDef) {
@@ -343,6 +368,22 @@ export async function POST(req: NextRequest) {
     if (amountUnits <= BigInt(0)) {
       throw new Error('전송 수량은 0보다 커야 합니다.');
     }
+
+    await assertVerifiedAdRewardChallenge(adChallengeId, {
+      from,
+      to,
+      amountUnits: amountUnits.toString(),
+      tokenSymbol: tokenDef.symbol,
+      chainId,
+    });
+
+    const { chain, rpcUrl } = getChainConfig(chainId);
+    const sponsorPk = getSponsorPrivateKey(chainId);
+    const account = privateKeyToAccount(sponsorPk);
+    const publicClient = createPublicClient({
+      chain,
+      transport: http(rpcUrl),
+    });
 
     // GIWA VerifiedToken(TEST)은 일반 ERC-20과 달리 검증된 수신자에게만
     // transfer/transferFrom을 허용한다. 프론트 검사를 우회한 API 호출도 차단한다.
@@ -438,7 +479,14 @@ export async function POST(req: NextRequest) {
           authorizationSig.s,
         ],
       });
-      checkAndIncreaseDailyLimit(from);
+      await authorizeRelayGasSponsorship({
+        adChallengeId,
+        from,
+        to,
+        amountUnits,
+        tokenSymbol: tokenDef.symbol,
+        chainId,
+      });
       txHash = await walletClient.writeContract(request);
       return NextResponse.json({ txHash });
     }
@@ -486,7 +534,14 @@ export async function POST(req: NextRequest) {
           sig.s,
         ],
       });
-      checkAndIncreaseDailyLimit(from);
+      await authorizeRelayGasSponsorship({
+        adChallengeId,
+        from,
+        to,
+        amountUnits,
+        tokenSymbol: tokenDef.symbol,
+        chainId,
+      });
       txHash = await walletClient.writeContract(request);
     } else {
       const { request } = await publicClient.simulateContract({
@@ -504,12 +559,25 @@ export async function POST(req: NextRequest) {
           signature as `0x${string}`,
         ],
       });
-      checkAndIncreaseDailyLimit(from);
+      await authorizeRelayGasSponsorship({
+        adChallengeId,
+        from,
+        to,
+        amountUnits,
+        tokenSymbol: tokenDef.symbol,
+        chainId,
+      });
       txHash = await walletClient.writeContract(request);
     }
 
     return NextResponse.json({ txHash });
   } catch (error) {
+    if (error instanceof AdRewardSecurityError) {
+      return NextResponse.json(
+        { code: error.code, error: error.message },
+        { status: error.status }
+      );
+    }
     const message =
       error instanceof Error ? error.message : '스폰서 트랜잭션 처리 중 오류가 발생했습니다.';
     if (message.toLowerCase().includes('0xb12c8f91') || message.toLowerCase().includes('notverified')) {

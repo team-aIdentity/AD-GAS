@@ -5,6 +5,7 @@ import { X, Play, Volume2, Loader2, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
 import type { RewardedAdShowOptions } from '@/hooks/useGoogleRewardedAd';
+import { waitForAdRewardVerification } from '@/lib/adRewardClient';
 
 interface PendingTransaction {
   to: string;
@@ -21,6 +22,8 @@ interface AdModalProps {
   /** 설정 시: 재생 클릭 후 GPT(웹) 또는 AdMob(앱) 리워드 영상 */
   showRealRewardedAd?: (opts?: RewardedAdShowOptions) => Promise<void>;
   isRewardedAdConfigured?: boolean;
+  /** AdMob SSV로 검증할 서버 발급 1회용 challenge. 보안 비활성/데모 환경에서는 null */
+  adChallengeId?: string | null;
 }
 
 export function AdModal({
@@ -30,6 +33,7 @@ export function AdModal({
   transaction,
   showRealRewardedAd,
   isRewardedAdConfigured,
+  adChallengeId,
 }: AdModalProps) {
   const { t } = useLocale();
   const [timeRemaining, setTimeRemaining] = useState(15);
@@ -66,11 +70,16 @@ export function AdModal({
       setAdSurfaceActive(false);
       try {
         await showRealRewardedAd({
+          ...(adChallengeId ? { ssvCustomData: adChallengeId } : {}),
           onAdSurfaceReady: () => {
             setAdSurfaceActive(true);
             setIsLoadingRealAd(false);
           },
         });
+        if (adChallengeId) {
+          setIsLoadingRealAd(true);
+          await waitForAdRewardVerification(adChallengeId);
+        }
         onComplete();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -82,7 +91,7 @@ export function AdModal({
       return;
     }
     setIsPlaying(true);
-  }, [isRewardedAdConfigured, onComplete, showRealRewardedAd]);
+  }, [adChallengeId, isRewardedAdConfigured, onComplete, showRealRewardedAd]);
 
   useEffect(() => {
     if (!isOpen || autoStartedRef.current) return;

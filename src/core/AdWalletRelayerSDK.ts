@@ -17,6 +17,7 @@ export interface SponsoredTransferRequest {
   authorizationNonce?: `0x${string}`; // 토큰 컨트랙트가 온체인에서 소비하는 bytes32 nonce
   validAfter?: number; // EIP-3009 유효 시작 시간
   validBefore?: number; // EIP-3009 만료 시간
+  adChallengeId?: string; // AdMob SSV로 검증된 1회용 광고 challenge
 }
 
 export interface SponsoredTransferResponse {

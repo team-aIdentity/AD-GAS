@@ -61,6 +61,10 @@ import { ensureWagmiClients } from '@/lib/ensureWagmiClients';
 import { getSponsoredTransferContractAddress } from '@/lib/sponsoredTransferContracts';
 import { preloadAdMobRewarded } from '@/utils/admobRewarded';
 import { isGiwaDojangRecipientVerified } from '@/lib/giwaDojang';
+import {
+  isAdRewardServerVerificationRequired,
+  issueAdRewardChallenge,
+} from '@/lib/adRewardClient';
 
 const DAILY_LIMIT = 10;
 
@@ -146,10 +150,10 @@ export function GaslessApp() {
   const { connectors, connect, reset: resetConnect, isPending: isConnectPending } = useConnect();
   const { disconnect } = useDisconnect();
 
-  const mapErrorToMessage = (error: Error) => {
+  const mapErrorToMessage = useCallback((error: Error) => {
     const key = getErrorKey(error);
     return key ? t(key) : error.message || t('errors.generic');
-  };
+  }, [t]);
   const [isMobile, setIsMobile] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const unsupportedChainWarnedRef = useRef<number | null>(null);
@@ -163,6 +167,7 @@ export function GaslessApp() {
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('0.0001');
   const [showAdModal, setShowAdModal] = useState(false);
+  const [adChallengeId, setAdChallengeId] = useState<string | null>(null);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completedTxHash, setCompletedTxHash] = useState<string | null>(null);
@@ -178,7 +183,6 @@ export function GaslessApp() {
     chainId: SupportedChainId;
   } | null>(null);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
-  const [isTransacting, setIsTransacting] = useState(false); // used in handleAdComplete
   const [txStatusMessage, setTxStatusMessage] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | null>(null);
   const [freeTransactionsUsed, setFreeTransactionsUsed] = useState(0);
@@ -418,9 +422,8 @@ export function GaslessApp() {
       setRecipientAddress('');
       setAmount('0.0001');
       setPendingTransaction(null);
+      setAdChallengeId(null);
     };
-
-    setIsTransacting(true);
 
     if (isCapacitorNativeApp()) beginWalletTxSigning();
 
@@ -499,6 +502,7 @@ export function GaslessApp() {
           authorizationNonce,
           validAfter,
           validBefore,
+          ...(adChallengeId ? { adChallengeId } : {}),
         };
         setTxStatusMessage(t('txModal.relayerSending'));
         const sdk = new AdWalletRelayerSDK({ baseUrl: getRelayerApiBase() });
@@ -509,7 +513,6 @@ export function GaslessApp() {
 
       const contractAddress = getSponsoredTransferContractAddress(targetChainId);
       if (!contractAddress) {
-        setIsTransacting(false);
         setShowTransactionModal(false);
         setTxStatusMessage(undefined);
         toast.error(
@@ -741,6 +744,7 @@ export function GaslessApp() {
         chainId: targetChainId,
         signature,
         nonce: nonce.toString(),
+        ...(adChallengeId ? { adChallengeId } : {}),
         ...(permitSignature && deadline !== undefined && { permitSignature, deadline }),
       });
       console.log('Sponsored transaction hash:', txHash);
@@ -784,14 +788,15 @@ export function GaslessApp() {
       setShowTransactionModal(false);
       setTxStatusMessage(undefined);
       setPendingTransaction(null);
+      setAdChallengeId(null);
     } finally {
-      setIsTransacting(false);
       if (isCapacitorNativeApp()) endWalletTxSigning();
       else setWalletLinkingFlag(false);
     }
   }, [
     address,
     pendingTransaction,
+    adChallengeId,
     t,
     mapErrorToMessage,
   ]);
@@ -799,8 +804,9 @@ export function GaslessApp() {
   const handleAdSkip = useCallback(() => {
     setShowAdModal(false);
     setPendingTransaction(null);
+    setAdChallengeId(null);
     toast.info(t('toast.adCancelled'));
-  }, []);
+  }, [t]);
 
   const handleSendClick = useCallback(async () => {
     if (isPreparingSend) return;
@@ -842,6 +848,7 @@ export function GaslessApp() {
     const targetChainId = targetNetwork.chainId as SupportedChainId;
     const targetToken = selectedToken;
     networkIntentChainIdRef.current = targetChainId;
+    let nextAdChallengeId: string | null = null;
 
     // 광고를 먼저 재생한 뒤 서명에서 체인 불일치를 발견하면 사용자가 광고만 보게 된다.
     // MetaMask SDK의 실제 activeChain이 선택 체인과 일치한 뒤에만 광고를 시작한다.
@@ -865,6 +872,29 @@ export function GaslessApp() {
           throw new Error(t('errors.giwaRecipientNotVerified'));
         }
       }
+
+      if (isCapacitorNativeApp()) {
+        const challenge = await issueAdRewardChallenge({
+          from: address as `0x${string}`,
+          to: recipientAddress.trim(),
+          amount,
+          tokenSymbol: targetToken.symbol,
+          chainId: targetChainId,
+        });
+        if (challenge.required) {
+          if (process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true') {
+            throw new Error(
+              '테스트 광고는 AdMob 서버 검증(SSV)을 보내지 않습니다. 테스트 서버에서는 AD_REWARD_SECURITY_MODE=disabled를 사용해주세요.'
+            );
+          }
+          nextAdChallengeId = challenge.challengeId;
+          await preloadAdMobRewarded({ ssvCustomData: nextAdChallengeId || undefined });
+        }
+      } else if (await isAdRewardServerVerificationRequired()) {
+        throw new Error(
+          '서버 검증이 적용된 무료 전송은 현재 Android 앱의 AdMob 광고에서 지원됩니다.'
+        );
+      }
     } catch (error) {
       toast.error(
         isWalletSwitchRejectedError(error)
@@ -881,6 +911,7 @@ export function GaslessApp() {
 
     flushSync(() => {
       setUserError(null);
+      setAdChallengeId(nextAdChallengeId);
       setPendingTransaction({
         to: recipientAddress.trim(),
         amount,
@@ -896,8 +927,7 @@ export function GaslessApp() {
     recipientAddress,
     amount,
     selectedToken,
-    selectedNetwork.name,
-    selectedNetwork.chainId,
+    address,
     t,
   ]);
 
@@ -1007,6 +1037,7 @@ export function GaslessApp() {
           transaction={pendingTransaction}
           showRealRewardedAd={rewardedAd.showRewardedAd}
           isRewardedAdConfigured={rewardedAd.isConfigured}
+          adChallengeId={adChallengeId}
         />
         <TransactionModal
           isOpen={showTransactionModal}
@@ -1203,6 +1234,7 @@ export function GaslessApp() {
         transaction={pendingTransaction}
         showRealRewardedAd={rewardedAd.showRewardedAd}
         isRewardedAdConfigured={rewardedAd.isConfigured}
+        adChallengeId={adChallengeId}
       />
       <TransactionModal
         isOpen={showTransactionModal}
