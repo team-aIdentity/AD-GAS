@@ -157,6 +157,7 @@ export function GaslessApp() {
   const [isMobile, setIsMobile] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const unsupportedChainWarnedRef = useRef<number | null>(null);
+  const adCompletionInFlightRef = useRef(false);
 
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(DEFAULT_NETWORK);
   // 사용자가 앱에서 선택한 체인은 지갑의 지연된 chainId 이벤트보다 우선한다.
@@ -382,6 +383,11 @@ export function GaslessApp() {
   );
 
   const handleAdComplete = useCallback(async () => {
+    // 광고 SDK의 reward/dismiss 콜백이 매우 가깝게 도착하거나 WebView가 복귀하며
+    // 콜백을 다시 전달해도 동일 전송의 EIP-712 서명을 두 번 요청하지 않는다.
+    if (adCompletionInFlightRef.current) return;
+    adCompletionInFlightRef.current = true;
+
     setShowAdModal(false);
     setTxStatusMessage(t('txModal.checkingNetwork'));
     setShowTransactionModal(true);
@@ -390,6 +396,7 @@ export function GaslessApp() {
       setShowTransactionModal(false);
       setTxStatusMessage(undefined);
       toast.error(t('toast.connectFirst'));
+      adCompletionInFlightRef.current = false;
       return;
     }
 
@@ -790,6 +797,7 @@ export function GaslessApp() {
       setPendingTransaction(null);
       setAdChallengeId(null);
     } finally {
+      adCompletionInFlightRef.current = false;
       if (isCapacitorNativeApp()) endWalletTxSigning();
       else setWalletLinkingFlag(false);
     }
