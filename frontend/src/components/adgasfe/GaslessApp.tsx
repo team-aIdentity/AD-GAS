@@ -25,6 +25,10 @@ import { TransferSection } from './TransferSection';
 import { AdModal } from './AdModal';
 import { TransactionModal } from './TransactionModal';
 import { TransactionCompleteModal } from './TransactionCompleteModal';
+import {
+  TransactionHistory,
+  type TransactionHistoryItem,
+} from './TransactionHistory';
 import { MobileHeader } from './mobile/MobileHeader';
 import { WalletConnectModal } from './WalletConnectModal';
 import { MobileNetworkSection } from './mobile/MobileNetworkSection';
@@ -67,6 +71,49 @@ import {
 } from '@/lib/adRewardClient';
 
 const DAILY_LIMIT = 10;
+const TRANSACTION_HISTORY_KEY = 'adGas_transaction_history_v1';
+const TRANSACTION_HISTORY_LIMIT = 50;
+
+function isTransactionHistoryItem(value: unknown): value is TransactionHistoryItem {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<TransactionHistoryItem>;
+  return (
+    typeof item.hash === 'string' &&
+    item.hash.startsWith('0x') &&
+    typeof item.from === 'string' &&
+    typeof item.to === 'string' &&
+    typeof item.amount === 'string' &&
+    typeof item.tokenSymbol === 'string' &&
+    typeof item.networkName === 'string' &&
+    typeof item.chainId === 'number' &&
+    Number.isFinite(item.chainId) &&
+    typeof item.timestamp === 'number' &&
+    Number.isFinite(item.timestamp)
+  );
+}
+
+function getStoredTransactionHistory(): TransactionHistoryItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(TRANSACTION_HISTORY_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isTransactionHistoryItem).slice(0, TRANSACTION_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function storeTransactionHistory(transactions: TransactionHistoryItem[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      TRANSACTION_HISTORY_KEY,
+      JSON.stringify(transactions.slice(0, TRANSACTION_HISTORY_LIMIT))
+    );
+  } catch {
+    // 저장 공간이 부족해도 성공한 온체인 전송 결과에는 영향을 주지 않는다.
+  }
+}
 
 function detectMobileLayout(): boolean {
   if (typeof navigator !== 'undefined') {
@@ -187,20 +234,11 @@ export function GaslessApp() {
   const [txStatusMessage, setTxStatusMessage] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | null>(null);
   const [freeTransactionsUsed, setFreeTransactionsUsed] = useState(0);
-  const [transactions, setTransactions] = useState<
-    {
-      hash: string;
-      to: string;
-      amount: string;
-      tokenSymbol: string;
-      networkName: string;
-      chainId: number;
-      timestamp: number;
-    }[]
-  >([]);
+  const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
 
   useEffect(() => {
     setFreeTransactionsUsed(getFreeTransactionsUsed());
+    setTransactions(getStoredTransactionHistory());
   }, []);
 
   useEffect(() => {
@@ -409,18 +447,26 @@ export function GaslessApp() {
       const today = new Date().toDateString();
       localStorage.setItem('adGas_usage', JSON.stringify({ date: today, count: newCount }));
       setFreeTransactionsUsed(newCount);
-      setTransactions(prev => [
-        {
-          hash: txHash,
-          to: pendingTransaction.to,
-          amount: pendingTransaction.amount,
-          tokenSymbol: pendingTransaction.token.symbol,
-          networkName: pendingTransaction.network.name,
-          chainId: targetChainId,
-          timestamp: Date.now(),
-        },
-        ...prev,
-      ]);
+      const completedTransaction: TransactionHistoryItem = {
+        hash: txHash,
+        from: address,
+        to: pendingTransaction.to,
+        amount: pendingTransaction.amount,
+        tokenSymbol: pendingTransaction.token.symbol,
+        networkName: pendingTransaction.network.name,
+        chainId: targetChainId,
+        timestamp: Date.now(),
+      };
+      setTransactions(prev => {
+        const next = [
+          completedTransaction,
+          ...prev.filter(
+            tx => tx.hash !== completedTransaction.hash || tx.chainId !== targetChainId
+          ),
+        ].slice(0, TRANSACTION_HISTORY_LIMIT);
+        storeTransactionHistory(next);
+        return next;
+      });
       setShowTransactionModal(false);
       setTxStatusMessage(undefined);
       setCompletedTxHash(txHash);
@@ -942,6 +988,10 @@ export function GaslessApp() {
     setSelectedToken(token);
   }, []);
 
+  const walletTransactions = address
+    ? transactions.filter(tx => tx.from.toLowerCase() === address.toLowerCase())
+    : [];
+
   if (!isConnected) {
     const promptCard = (
       <div className="w-full max-w-md space-y-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-6 text-center sm:p-8">
@@ -1011,26 +1061,38 @@ export function GaslessApp() {
           onDisconnect={handleDisconnect}
           freeTransactionsUsed={freeTransactionsUsed}
         />
+        <div className="px-5 pb-4">
+          <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
         <main className="px-5 pb-8 space-y-5">
-          <MobileNetworkSection
-            networks={SUPPORTED_NETWORKS}
-            selectedNetwork={selectedNetwork}
-            onNetworkChange={handleNetworkChange}
-          />
-          <MobileGasSavings freeTransactionsUsed={freeTransactionsUsed} dailyLimit={DAILY_LIMIT} />
-          <MobileTransferForm
-            isConnected={isConnected}
-            walletAddress={walletShort}
-            recipientAddress={recipientAddress}
-            onRecipientChange={setRecipientAddress}
-            selectedToken={selectedToken}
-            onTokenChange={onTokenChange}
-            amount={amount}
-            onAmountChange={setAmount}
-            availableTokens={availableTokens}
-            onSendClick={handleSendClick}
-            isPreparing={isPreparingSend}
-          />
+          {activeTab === 'send' ? (
+            <>
+              <MobileNetworkSection
+                networks={SUPPORTED_NETWORKS}
+                selectedNetwork={selectedNetwork}
+                onNetworkChange={handleNetworkChange}
+              />
+              <MobileGasSavings
+                freeTransactionsUsed={freeTransactionsUsed}
+                dailyLimit={DAILY_LIMIT}
+              />
+              <MobileTransferForm
+                isConnected={isConnected}
+                walletAddress={walletShort}
+                recipientAddress={recipientAddress}
+                onRecipientChange={setRecipientAddress}
+                selectedToken={selectedToken}
+                onTokenChange={onTokenChange}
+                amount={amount}
+                onAmountChange={setAmount}
+                availableTokens={availableTokens}
+                onSendClick={handleSendClick}
+                isPreparing={isPreparingSend}
+              />
+            </>
+          ) : (
+            <TransactionHistory transactions={walletTransactions} />
+          )}
         </main>
         <footer className="px-5 pb-8 text-center">
           <a href="/privacy" className="text-xs font-semibold text-[#93c5fd] hover:underline">
@@ -1149,62 +1211,7 @@ export function GaslessApp() {
             </>
           )}
           {activeTab === 'transaction' && (
-            <div className="bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] rounded-[24px] p-7">
-              <div className="flex flex-col gap-6">
-                <div className="flex flex-col gap-1.5">
-                  <p className="font-extrabold text-[20px] leading-6 text-white">
-                    {t('transactionHistory')}
-                  </p>
-                  <p className="font-medium text-[14px] leading-[16.8px] text-[#94a3b8]">
-                    {t('transactionHistoryDesc')}
-                  </p>
-                </div>
-                {transactions.length === 0 ? (
-                  <div className="text-center py-12 text-[#94a3b8]">{t('noTransactionsYet')}</div>
-                ) : (
-                  <div className="space-y-3">
-                    {transactions.map(tx => {
-                      const date = new Date(tx.timestamp);
-                      const shortHash = `${tx.hash.slice(0, 6)}...${tx.hash.slice(-4)}`;
-                      return (
-                        <div
-                          key={tx.hash + tx.timestamp}
-                          className="flex items-center justify-between bg-[rgba(15,23,42,0.8)] border border-[rgba(148,163,184,0.3)] rounded-2xl px-4 py-3"
-                        >
-                          <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-white">
-                              {tx.amount} {tx.tokenSymbol}
-                            </span>
-                            <span className="text-xs text-[#94a3b8]">
-                              {tx.networkName} • {date.toLocaleString()}
-                            </span>
-                            <span className="text-xs text-[#64748b] break-all">To: {tx.to}</span>
-                          </div>
-                          <a
-                            href={
-                              tx.chainId === 43114
-                                ? `https://snowtrace.io/tx/${tx.hash}`
-                                : tx.chainId === 8453
-                                  ? `https://basescan.org/tx/${tx.hash}`
-                                  : tx.chainId === 56
-                                    ? `https://bscscan.com/tx/${tx.hash}`
-                                    : tx.chainId === 91342
-                                      ? `https://sepolia-explorer.giwa.io/tx/${tx.hash}`
-                                      : '#'
-                            }
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs text-[#60a5fa] hover:underline"
-                          >
-                            {shortHash}
-                          </a>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
+            <TransactionHistory transactions={walletTransactions} />
           )}
         </div>
       </main>
