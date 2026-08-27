@@ -14,7 +14,7 @@ const TEST_DAILY_LIMIT = 10;
 const TEST_AD_SUPPORTED_CHAIN_IDS = new Set([8453, 43114, 56, 91342]);
 // 원문 토큰은 비공개 테스트 APK에만 포함하고 서버에는 SHA-256 digest만 둔다.
 const PRIVATE_TEST_APK_TOKEN_SHA256 =
-  'ae24a69429ecbea3920fa761b910b82819660f5af84c68dd266408ccc145f97c';
+  'df9821c7291639193a18ba3d264b4736b7afad1a476416497962d70ae99fb65a';
 
 export type AdRewardIntent = {
   from: string;
