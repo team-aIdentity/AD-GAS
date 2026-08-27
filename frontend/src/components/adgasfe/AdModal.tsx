@@ -5,7 +5,10 @@ import { X, Play, Volume2, Loader2, Maximize2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocale } from '@/contexts/LocaleContext';
 import type { RewardedAdShowOptions } from '@/hooks/useGoogleRewardedAd';
-import { waitForAdRewardVerification } from '@/lib/adRewardClient';
+import {
+  completeGoogleTestAdReward,
+  waitForAdRewardVerification,
+} from '@/lib/adRewardClient';
 
 interface PendingTransaction {
   to: string;
@@ -78,6 +81,9 @@ export function AdModal({
         });
         if (adChallengeId) {
           setIsLoadingRealAd(true);
+          if (process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true') {
+            await completeGoogleTestAdReward(adChallengeId);
+          }
           await waitForAdRewardVerification(adChallengeId);
         }
         onComplete();

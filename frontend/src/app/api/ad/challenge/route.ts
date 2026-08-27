@@ -3,6 +3,7 @@ import { getAddress, parseUnits } from 'viem';
 
 import {
   AdRewardSecurityError,
+  assertPrivateTestApkToken,
   createAdRewardChallenge,
   getAdRewardChallengeStatus,
   isAdRewardSecurityRequired,
@@ -19,6 +20,7 @@ type ChallengeBody = {
   amount?: string;
   tokenSymbol?: string;
   chainId?: number;
+  testAd?: boolean;
 };
 
 function errorResponse(error: unknown): NextResponse {
@@ -38,7 +40,14 @@ function errorResponse(error: unknown): NextResponse {
 }
 
 export async function OPTIONS() {
-  return new NextResponse(null, { status: 204 });
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-ADGAS-Test-Token',
+    },
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -85,13 +94,22 @@ export async function POST(request: NextRequest) {
     const clientIp = forwardedFor.split(',')[0]?.trim() || 'unknown';
     await rateLimitAdRewardChallengeIssue(clientIp);
 
-    const challenge = await createAdRewardChallenge({
-      from,
-      to,
-      chainId: body.chainId!,
-      tokenSymbol: tokenDef.symbol,
-      amountUnits: amountUnits.toString(),
-    });
+    if (body.testAd) {
+      assertPrivateTestApkToken(request.headers.get('x-adgas-test-token'));
+    }
+
+    const challenge = await createAdRewardChallenge(
+      {
+        from,
+        to,
+        chainId: body.chainId!,
+        tokenSymbol: tokenDef.symbol,
+        amountUnits: amountUnits.toString(),
+      },
+      {
+        verificationSource: body.testAd ? 'google-test-ad' : 'admob-ssv',
+      }
+    );
     return NextResponse.json({ required: true, ...challenge });
   } catch (error) {
     return errorResponse(error);

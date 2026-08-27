@@ -1,14 +1,20 @@
 import 'server-only';
 
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const CHALLENGE_PREFIX = 'adgas:ad-reward:';
 const SSV_TRANSACTION_PREFIX = 'adgas:admob-tx:';
 const DAILY_USAGE_PREFIX = 'adgas:daily-usage:';
+const TEST_DAILY_USAGE_PREFIX = 'adgas:test-daily-usage:';
 const CHALLENGE_ISSUE_LIMIT_PREFIX = 'adgas:challenge-issue-limit:';
 const DEFAULT_CHALLENGE_TTL_SECONDS = 10 * 60;
 const SSV_TRANSACTION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const DAILY_LIMIT = 10;
+const TEST_DAILY_LIMIT = 10;
+const TEST_AD_SUPPORTED_CHAIN_IDS = new Set([8453, 43114, 56, 91342]);
+// 원문 토큰은 비공개 테스트 APK에만 포함하고 서버에는 SHA-256 digest만 둔다.
+const PRIVATE_TEST_APK_TOKEN_SHA256 =
+  'ae24a69429ecbea3920fa761b910b82819660f5af84c68dd266408ccc145f97c';
 
 export type AdRewardIntent = {
   from: string;
@@ -21,6 +27,7 @@ export type AdRewardIntent = {
 type AdRewardRecord = {
   intentHash: string;
   status: 'pending' | 'verified';
+  verificationSource?: 'admob-ssv' | 'google-test-ad';
   createdAt: number;
   expiresAt: number;
   verifiedAt?: number;
@@ -120,8 +127,26 @@ export function hashAdRewardIntent(intent: AdRewardIntent): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+/** Google 테스트 광고 POC는 현재 앱이 지원하는 체인에서 모든 지갑에 허용한다. */
+export function isTestAdRewardEligible(intent: AdRewardIntent): boolean {
+  return TEST_AD_SUPPORTED_CHAIN_IDS.has(intent.chainId);
+}
+
+export function assertPrivateTestApkToken(token: string | null | undefined): void {
+  const digest = createHash('sha256').update(token || '').digest();
+  const expected = Buffer.from(PRIVATE_TEST_APK_TOKEN_SHA256, 'hex');
+  if (digest.length !== expected.length || !timingSafeEqual(digest, expected)) {
+    throw new AdRewardSecurityError(
+      'PRIVATE_TEST_APK_REQUIRED',
+      '비공개 테스트 APK 인증이 필요합니다.',
+      403
+    );
+  }
+}
+
 export async function createAdRewardChallenge(
-  intent: AdRewardIntent
+  intent: AdRewardIntent,
+  options: { verificationSource?: 'admob-ssv' | 'google-test-ad' } = {}
 ): Promise<{ challengeId: string; expiresIn: number }> {
   if (!isAdRewardSecurityRequired()) {
     throw new AdRewardSecurityError(
@@ -131,12 +156,22 @@ export async function createAdRewardChallenge(
     );
   }
 
+  const verificationSource = options.verificationSource ?? 'admob-ssv';
+  if (verificationSource === 'google-test-ad' && !isTestAdRewardEligible(intent)) {
+    throw new AdRewardSecurityError(
+      'TEST_AD_SPONSOR_NOT_ALLOWED',
+      'Google 테스트 광고 가스 대납은 AD-GAS가 지원하는 체인에서만 사용할 수 있습니다.',
+      403
+    );
+  }
+
   const challengeId = randomBytes(24).toString('hex');
   const ttl = challengeTtlSeconds();
   const now = Date.now();
   const record: AdRewardRecord = {
     intentHash: hashAdRewardIntent(intent),
     status: 'pending',
+    verificationSource,
     createdAt: now,
     expiresAt: now + ttl * 1000,
   };
@@ -156,6 +191,51 @@ export async function createAdRewardChallenge(
     );
   }
   return { challengeId, expiresIn: ttl };
+}
+
+/**
+ * 네이티브 SDK의 Rewarded 이벤트 후 POC용 테스트 challenge를 승인한다.
+ * challenge 자체는 192-bit 임의값이며 실제 릴레이에서는 지갑 서명·nonce·의도를 다시 검증한다.
+ */
+export async function markGoogleTestAdChallengeVerified(challengeId: string): Promise<void> {
+  if (!isAdRewardSecurityRequired()) return;
+  if (!isValidAdChallengeId(challengeId)) {
+    throw new AdRewardSecurityError(
+      'AD_REWARD_CHALLENGE_INVALID',
+      '광고 확인 요청 ID가 올바르지 않습니다.'
+    );
+  }
+  const script = [
+    "local raw = redis.call('GET', KEYS[1])",
+    "if not raw then return 'MISSING' end",
+    'local record = cjson.decode(raw)',
+    "if record.verificationSource ~= 'google-test-ad' then return 'NOT_TEST' end",
+    "if record.status == 'verified' then return 'OK' end",
+    "record.status = 'verified'",
+    'record.verifiedAt = tonumber(ARGV[1])',
+    "redis.call('SET', KEYS[1], cjson.encode(record), 'KEEPTTL')",
+    "return 'OK'",
+  ].join('\n');
+  const result = await redisCommand<string>([
+    'EVAL',
+    script,
+    1,
+    `${CHALLENGE_PREFIX}${challengeId}`,
+    Date.now(),
+  ]);
+  if (result === 'OK') return;
+  if (result === 'NOT_TEST') {
+    throw new AdRewardSecurityError(
+      'TEST_AD_CHALLENGE_NOT_ALLOWED',
+      '운영 AdMob challenge는 테스트 광고 완료로 승인할 수 없습니다.',
+      403
+    );
+  }
+  throw new AdRewardSecurityError(
+    'AD_REWARD_CHALLENGE_MISSING',
+    '광고 확인 요청이 만료되었거나 존재하지 않습니다.',
+    404
+  );
 }
 
 export async function rateLimitAdRewardChallengeIssue(clientKey: string): Promise<void> {
@@ -338,20 +418,30 @@ export async function authorizeSponsoredTransfer(
     "if record.intentHash ~= ARGV[1] then return 'INTENT_MISMATCH' end",
     "local current = tonumber(redis.call('GET', KEYS[2]) or '0')",
     "if current >= tonumber(ARGV[2]) then return 'LIMIT' end",
+    "if record.verificationSource == 'google-test-ad' then",
+    "  local testCurrent = tonumber(redis.call('GET', KEYS[3]) or '0')",
+    "  if testCurrent >= tonumber(ARGV[4]) then return 'TEST_LIMIT' end",
+    'end',
     "redis.call('DEL', KEYS[1])",
     "local value = redis.call('INCR', KEYS[2])",
     "if value == 1 then redis.call('EXPIRE', KEYS[2], ARGV[3]) end",
+    "if record.verificationSource == 'google-test-ad' then",
+    "  local testValue = redis.call('INCR', KEYS[3])",
+    "  if testValue == 1 then redis.call('EXPIRE', KEYS[3], ARGV[3]) end",
+    'end',
     "return 'OK'",
   ].join('\n');
   const result = await redisCommand<string>([
     'EVAL',
     script,
-    2,
+    3,
     `${CHALLENGE_PREFIX}${challengeId}`,
     `${DAILY_USAGE_PREFIX}${date}:${addressHash}`,
+    `${TEST_DAILY_USAGE_PREFIX}${date}`,
     hashAdRewardIntent(expectedIntent),
     DAILY_LIMIT,
     172800,
+    TEST_DAILY_LIMIT,
   ]);
 
   switch (result) {
@@ -373,6 +463,12 @@ export async function authorizeSponsoredTransfer(
       throw new AdRewardSecurityError(
         'DAILY_SPONSOR_LIMIT',
         `오늘 무료 전송 한도(${DAILY_LIMIT}회)를 모두 사용했습니다.`,
+        429
+      );
+    case 'TEST_LIMIT':
+      throw new AdRewardSecurityError(
+        'TEST_AD_DAILY_SPONSOR_LIMIT',
+        `오늘 테스트 광고 가스 대납 전체 한도(${TEST_DAILY_LIMIT}회)를 모두 사용했습니다.`,
         429
       );
     default:

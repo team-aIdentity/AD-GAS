@@ -6,6 +6,7 @@ type AdRewardIntent = {
   amount: string;
   tokenSymbol: string;
   chainId: number;
+  testAd?: boolean;
 };
 
 type ChallengeResponse = {
@@ -18,6 +19,12 @@ type ChallengeResponse = {
 
 function endpoint(path: string): string {
   return `${getRelayerApiBase()}${path}`;
+}
+
+function privateTestApkToken(): string {
+  const token = process.env.NEXT_PUBLIC_TEST_AD_ACCESS_TOKEN?.trim();
+  if (!token) throw new Error('비공개 테스트 APK 인증 토큰이 없습니다.');
+  return token;
 }
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
@@ -46,7 +53,10 @@ export async function issueAdRewardChallenge(
 ): Promise<ChallengeResponse> {
   const response = await fetch(endpoint('/ad/challenge'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(intent.testAd ? { 'x-adgas-test-token': privateTestApkToken() } : {}),
+    },
     body: JSON.stringify(intent),
   });
   if (!response.ok) {
@@ -86,4 +96,18 @@ export async function waitForAdRewardVerification(
     await delay(1000);
   }
   throw new Error('광고 서버 확인이 지연되고 있습니다. 잠시 후 다시 시도해주세요.');
+}
+
+export async function completeGoogleTestAdReward(challengeId: string): Promise<void> {
+  const response = await fetch(endpoint('/ad/test-complete'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-adgas-test-token': privateTestApkToken(),
+    },
+    body: JSON.stringify({ challengeId }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, '테스트 광고 완료를 서버에서 확인하지 못했습니다.');
+  }
 }

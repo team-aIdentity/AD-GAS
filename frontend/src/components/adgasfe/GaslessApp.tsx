@@ -874,21 +874,20 @@ export function GaslessApp() {
       }
 
       if (isCapacitorNativeApp()) {
+        const testAd = process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true';
         const challenge = await issueAdRewardChallenge({
           from: address as `0x${string}`,
           to: recipientAddress.trim(),
           amount,
           tokenSymbol: targetToken.symbol,
           chainId: targetChainId,
+          ...(testAd ? { testAd: true } : {}),
         });
         if (challenge.required) {
-          if (process.env.NEXT_PUBLIC_ADMOB_USE_TEST_ADS === 'true') {
-            throw new Error(
-              '테스트 광고는 AdMob 서버 검증(SSV)을 보내지 않습니다. 테스트 서버에서는 AD_REWARD_SECURITY_MODE=disabled를 사용해주세요.'
-            );
-          }
           nextAdChallengeId = challenge.challengeId;
-          await preloadAdMobRewarded({ ssvCustomData: nextAdChallengeId || undefined });
+          await preloadAdMobRewarded(
+            testAd ? {} : { ssvCustomData: nextAdChallengeId || undefined }
+          );
         }
       } else if (await isAdRewardServerVerificationRequired()) {
         throw new Error(
