@@ -24,7 +24,6 @@ interface WalletConnectModalProps {
   connect: ConnectFn;
   reset: () => void;
   isPending: boolean;
-  accountStatus: 'connecting' | 'reconnecting' | 'connected' | 'disconnected';
   targetChainId: SupportedChainId;
 }
 
@@ -51,7 +50,11 @@ async function waitForAuthorization(
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     try {
-      if (await connector.isAuthorized()) return true;
+      const authorized = await Promise.race([
+        connector.isAuthorized(),
+        new Promise<false>(resolve => window.setTimeout(() => resolve(false), 750)),
+      ]);
+      if (authorized) return true;
     } catch {
       // MetaMask 복귀 메시지가 도착할 때까지 계속 기다린다.
     }
@@ -70,7 +73,6 @@ export function WalletConnectModal({
   connect,
   reset,
   isPending,
-  accountStatus,
   targetChainId,
 }: WalletConnectModalProps) {
   const { t } = useLocale();
@@ -106,33 +108,26 @@ export function WalletConnectModal({
 
   const tryRestoreConnection = async (connector: Connector): Promise<boolean> => {
     try {
-      const connections = await reconnect(config, { connectors: [connector] });
+      const connections = await Promise.race([
+        reconnect(config, { connectors: [connector] }),
+        new Promise<never[]>((_, reject) =>
+          window.setTimeout(() => reject(new Error('Reconnect timed out')), 2500)
+        ),
+      ]);
       return connections.some(connection => connection.connector.uid === connector.uid);
     } catch {
       return false;
     }
   };
 
-  const startConnect = async (connector: Connector) => {
-    if (
-      startingRef.current ||
-      isPending ||
-      accountStatus === 'connecting' ||
-      accountStatus === 'reconnecting'
-    ) return;
+  const startConnect = (connector: Connector) => {
+    if (startingRef.current || isPending) return;
     startingRef.current = true;
     setIsStarting(true);
     if (nativeApp) setWalletLinkingFlag(true);
 
-    try {
-      if ((await connector.isAuthorized()) && (await tryRestoreConnection(connector))) {
-        finishConnected();
-        return;
-      }
-    } catch {
-      // 승인 세션 조회 실패 시 일반 연결 요청으로 계속한다.
-    }
-
+    // 사용자 탭에서는 MetaMask 연결을 즉시 시작한다. 자동 reconnect 상태를
+    // 선행 조건으로 삼으면 복구가 멈춘 순간 버튼이 영구적으로 막힐 수 있다.
     connect(
       { connector, chainId: targetChainId },
       {
@@ -180,11 +175,7 @@ export function WalletConnectModal({
     onClose();
   };
 
-  const connectionBusy =
-    isPending ||
-    isStarting ||
-    accountStatus === 'connecting' ||
-    accountStatus === 'reconnecting';
+  const connectionBusy = isPending || isStarting;
   const nativeConnecting = nativeApp && connectionBusy;
 
   return createPortal(
@@ -218,7 +209,7 @@ export function WalletConnectModal({
                   key={connector.uid}
                   type="button"
                   disabled={connectionBusy}
-                  onClick={() => void startConnect(connector)}
+                  onClick={() => startConnect(connector)}
                   className="w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] px-4 py-3 text-left font-medium text-white transition-colors hover:bg-[rgba(99,102,241,0.13)] disabled:opacity-50"
                 >
                   {connectorLabel(connector)}

@@ -25,10 +25,7 @@ import { TransferSection } from './TransferSection';
 import { AdModal } from './AdModal';
 import { TransactionModal } from './TransactionModal';
 import { TransactionCompleteModal } from './TransactionCompleteModal';
-import {
-  TransactionHistory,
-  type TransactionHistoryItem,
-} from './TransactionHistory';
+import { TransactionHistory } from './TransactionHistory';
 import { MobileHeader } from './mobile/MobileHeader';
 import { WalletConnectModal } from './WalletConnectModal';
 import { MobileNetworkSection } from './mobile/MobileNetworkSection';
@@ -71,49 +68,6 @@ import {
 } from '@/lib/adRewardClient';
 
 const DAILY_LIMIT = 10;
-const TRANSACTION_HISTORY_KEY = 'adGas_transaction_history_v1';
-const TRANSACTION_HISTORY_LIMIT = 50;
-
-function isTransactionHistoryItem(value: unknown): value is TransactionHistoryItem {
-  if (!value || typeof value !== 'object') return false;
-  const item = value as Partial<TransactionHistoryItem>;
-  return (
-    typeof item.hash === 'string' &&
-    item.hash.startsWith('0x') &&
-    typeof item.from === 'string' &&
-    typeof item.to === 'string' &&
-    typeof item.amount === 'string' &&
-    typeof item.tokenSymbol === 'string' &&
-    typeof item.networkName === 'string' &&
-    typeof item.chainId === 'number' &&
-    Number.isFinite(item.chainId) &&
-    typeof item.timestamp === 'number' &&
-    Number.isFinite(item.timestamp)
-  );
-}
-
-function getStoredTransactionHistory(): TransactionHistoryItem[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(TRANSACTION_HISTORY_KEY) || '[]');
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isTransactionHistoryItem).slice(0, TRANSACTION_HISTORY_LIMIT);
-  } catch {
-    return [];
-  }
-}
-
-function storeTransactionHistory(transactions: TransactionHistoryItem[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(
-      TRANSACTION_HISTORY_KEY,
-      JSON.stringify(transactions.slice(0, TRANSACTION_HISTORY_LIMIT))
-    );
-  } catch {
-    // 저장 공간이 부족해도 성공한 온체인 전송 결과에는 영향을 주지 않는다.
-  }
-}
 
 function detectMobileLayout(): boolean {
   if (typeof navigator !== 'undefined') {
@@ -234,11 +188,9 @@ export function GaslessApp() {
   const [txStatusMessage, setTxStatusMessage] = useState<string | undefined>();
   const [userError, setUserError] = useState<string | null>(null);
   const [freeTransactionsUsed, setFreeTransactionsUsed] = useState(0);
-  const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
 
   useEffect(() => {
     setFreeTransactionsUsed(getFreeTransactionsUsed());
-    setTransactions(getStoredTransactionHistory());
   }, []);
 
   useEffect(() => {
@@ -447,26 +399,6 @@ export function GaslessApp() {
       const today = new Date().toDateString();
       localStorage.setItem('adGas_usage', JSON.stringify({ date: today, count: newCount }));
       setFreeTransactionsUsed(newCount);
-      const completedTransaction: TransactionHistoryItem = {
-        hash: txHash,
-        from: address,
-        to: pendingTransaction.to,
-        amount: pendingTransaction.amount,
-        tokenSymbol: pendingTransaction.token.symbol,
-        networkName: pendingTransaction.network.name,
-        chainId: targetChainId,
-        timestamp: Date.now(),
-      };
-      setTransactions(prev => {
-        const next = [
-          completedTransaction,
-          ...prev.filter(
-            tx => tx.hash !== completedTransaction.hash || tx.chainId !== targetChainId
-          ),
-        ].slice(0, TRANSACTION_HISTORY_LIMIT);
-        storeTransactionHistory(next);
-        return next;
-      });
       setShowTransactionModal(false);
       setTxStatusMessage(undefined);
       setCompletedTxHash(txHash);
@@ -988,10 +920,6 @@ export function GaslessApp() {
     setSelectedToken(token);
   }, []);
 
-  const walletTransactions = address
-    ? transactions.filter(tx => tx.from.toLowerCase() === address.toLowerCase())
-    : [];
-
   if (!isConnected) {
     const promptCard = (
       <div className="w-full max-w-md space-y-6 rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.03)] p-6 text-center sm:p-8">
@@ -1044,7 +972,6 @@ export function GaslessApp() {
           connect={connect}
           reset={resetConnect}
           isPending={isConnectPending}
-          accountStatus={accountStatus}
           targetChainId={selectedNetwork.chainId as SupportedChainId}
         />
         <Toaster />
@@ -1091,7 +1018,11 @@ export function GaslessApp() {
               />
             </>
           ) : (
-            <TransactionHistory transactions={walletTransactions} />
+            <TransactionHistory
+              address={address}
+              chainId={selectedNetwork.chainId}
+              networkName={selectedNetwork.name}
+            />
           )}
         </main>
         <footer className="px-5 pb-8 text-center">
@@ -1211,7 +1142,11 @@ export function GaslessApp() {
             </>
           )}
           {activeTab === 'transaction' && (
-            <TransactionHistory transactions={walletTransactions} />
+            <TransactionHistory
+              address={address}
+              chainId={selectedNetwork.chainId}
+              networkName={selectedNetwork.name}
+            />
           )}
         </div>
       </main>
@@ -1238,7 +1173,6 @@ export function GaslessApp() {
         connect={connect}
         reset={resetConnect}
         isPending={isConnectPending}
-        accountStatus={accountStatus}
         targetChainId={selectedNetwork.chainId as SupportedChainId}
       />
       <AdModal
