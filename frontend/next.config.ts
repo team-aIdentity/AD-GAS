@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
           { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
           {
             key: "Access-Control-Allow-Headers",
-            value: "Content-Type, X-ADGAS-Test-Token",
+            value: "Content-Type",
           },
         ],
       },
