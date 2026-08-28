@@ -21,7 +21,7 @@ fi
 export MOBILE_STATIC_EXPORT=1
 export NEXT_PUBLIC_RELAYER_API_BASE="${NEXT_PUBLIC_RELAYER_API_BASE:-https://ad-gas.vercel.app/api}"
 export NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID="${NEXT_PUBLIC_ADMOB_REWARDED_AD_UNIT_ID_ANDROID:-ca-app-pub-1201899929581374/3951197726}"
-# POC/debug APK는 별도 .env 파일이 없어도 Google 공식 테스트 리워드 광고를 사용한다.
+# 공개 POC/debug APK는 별도 인증 토큰 없이 Google 공식 테스트 리워드 광고를 사용한다.
 # 실제 광고 배포 시 명시적으로 false와 운영 광고 단위 ID를 전달한다.
 export NEXT_PUBLIC_ADMOB_USE_TEST_ADS="${NEXT_PUBLIC_ADMOB_USE_TEST_ADS:-true}"
 

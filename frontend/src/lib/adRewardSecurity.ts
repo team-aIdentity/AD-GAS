@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 const CHALLENGE_PREFIX = 'adgas:ad-reward:';
 const SSV_TRANSACTION_PREFIX = 'adgas:admob-tx:';
@@ -12,9 +12,6 @@ const SSV_TRANSACTION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const DAILY_LIMIT = 10;
 const TEST_DAILY_LIMIT = 10;
 const TEST_AD_SUPPORTED_CHAIN_IDS = new Set([8453, 43114, 56, 91342]);
-// 원문 토큰은 비공개 테스트 APK에만 포함하고 서버에는 SHA-256 digest만 둔다.
-const PRIVATE_TEST_APK_TOKEN_SHA256 =
-  'df9821c7291639193a18ba3d264b4736b7afad1a476416497962d70ae99fb65a';
 
 export type AdRewardIntent = {
   from: string;
@@ -58,6 +55,11 @@ function securityMode(): 'required' | 'disabled' {
 
 export function isAdRewardSecurityRequired(): boolean {
   return securityMode() === 'required';
+}
+
+/** 앱 심사 전 공개 POC용. false로 설정하면 테스트 광고 가스 대납만 즉시 닫힌다. */
+export function isPublicTestAdModeEnabled(): boolean {
+  return process.env.AD_REWARD_PUBLIC_TEST_MODE?.trim().toLowerCase() !== 'false';
 }
 
 function redisConfig(): { url: string; token: string } {
@@ -130,18 +132,6 @@ export function hashAdRewardIntent(intent: AdRewardIntent): string {
 /** Google 테스트 광고 POC는 현재 앱이 지원하는 체인에서 모든 지갑에 허용한다. */
 export function isTestAdRewardEligible(intent: AdRewardIntent): boolean {
   return TEST_AD_SUPPORTED_CHAIN_IDS.has(intent.chainId);
-}
-
-export function assertPrivateTestApkToken(token: string | null | undefined): void {
-  const digest = createHash('sha256').update(token || '').digest();
-  const expected = Buffer.from(PRIVATE_TEST_APK_TOKEN_SHA256, 'hex');
-  if (digest.length !== expected.length || !timingSafeEqual(digest, expected)) {
-    throw new AdRewardSecurityError(
-      'PRIVATE_TEST_APK_REQUIRED',
-      '비공개 테스트 APK 인증이 필요합니다.',
-      403
-    );
-  }
 }
 
 export async function createAdRewardChallenge(

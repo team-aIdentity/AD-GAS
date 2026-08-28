@@ -21,12 +21,6 @@ function endpoint(path: string): string {
   return `${getRelayerApiBase()}${path}`;
 }
 
-function privateTestApkToken(): string {
-  const token = process.env.NEXT_PUBLIC_TEST_AD_ACCESS_TOKEN?.trim();
-  if (!token) throw new Error('비공개 테스트 APK 인증 토큰이 없습니다.');
-  return token;
-}
-
 async function responseError(response: Response, fallback: string): Promise<Error> {
   try {
     const payload = (await response.json()) as { error?: string };
@@ -55,7 +49,6 @@ export async function issueAdRewardChallenge(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(intent.testAd ? { 'x-adgas-test-token': privateTestApkToken() } : {}),
     },
     body: JSON.stringify(intent),
   });
@@ -103,7 +96,6 @@ export async function completeGoogleTestAdReward(challengeId: string): Promise<v
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-adgas-test-token': privateTestApkToken(),
     },
     body: JSON.stringify({ challengeId }),
   });

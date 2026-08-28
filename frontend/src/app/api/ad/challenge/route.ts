@@ -3,10 +3,10 @@ import { getAddress, parseUnits } from 'viem';
 
 import {
   AdRewardSecurityError,
-  assertPrivateTestApkToken,
   createAdRewardChallenge,
   getAdRewardChallengeStatus,
   isAdRewardSecurityRequired,
+  isPublicTestAdModeEnabled,
   isValidAdChallengeId,
   rateLimitAdRewardChallengeIssue,
 } from '@/lib/adRewardSecurity';
@@ -45,7 +45,7 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-ADGAS-Test-Token',
+      'Access-Control-Allow-Headers': 'Content-Type',
     },
   });
 }
@@ -94,8 +94,12 @@ export async function POST(request: NextRequest) {
     const clientIp = forwardedFor.split(',')[0]?.trim() || 'unknown';
     await rateLimitAdRewardChallengeIssue(clientIp);
 
-    if (body.testAd) {
-      assertPrivateTestApkToken(request.headers.get('x-adgas-test-token'));
+    if (body.testAd && !isPublicTestAdModeEnabled()) {
+      throw new AdRewardSecurityError(
+        'PUBLIC_TEST_AD_MODE_DISABLED',
+        '공개 테스트 광고 가스 대납이 종료되었습니다.',
+        403
+      );
     }
 
     const challenge = await createAdRewardChallenge(

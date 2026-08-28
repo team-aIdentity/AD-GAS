@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import {
   AdRewardSecurityError,
-  assertPrivateTestApkToken,
   isAdRewardSecurityRequired,
+  isPublicTestAdModeEnabled,
   markGoogleTestAdChallengeVerified,
 } from '@/lib/adRewardSecurity';
 
@@ -16,7 +16,7 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-ADGAS-Test-Token',
+      'Access-Control-Allow-Headers': 'Content-Type',
     },
   });
 }
@@ -26,7 +26,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
   try {
-    assertPrivateTestApkToken(request.headers.get('x-adgas-test-token'));
+    if (!isPublicTestAdModeEnabled()) {
+      throw new AdRewardSecurityError(
+        'PUBLIC_TEST_AD_MODE_DISABLED',
+        '공개 테스트 광고 가스 대납이 종료되었습니다.',
+        403
+      );
+    }
     const body = (await request.json()) as { challengeId?: string };
     await markGoogleTestAdChallengeVerified(body.challengeId || '');
     return NextResponse.json({ ok: true });
