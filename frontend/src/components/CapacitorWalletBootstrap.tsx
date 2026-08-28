@@ -77,6 +77,7 @@ export function CapacitorWalletBootstrap() {
   const statusRef = useRef(status);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectInFlightRef = useRef(false);
+  const lastSigningTransportResumeRef = useRef(0);
 
   statusRef.current = status;
 
@@ -168,6 +169,14 @@ export function CapacitorWalletBootstrap() {
 
       // Permit 직후 Transfer 서명: reconnect·플래그 해제로 두 번째 팝업 막지 않음
       if (isTxSigningInProgress()) {
+        // MetaMask Connect의 MWP transport는 브라우저 focus 이벤트에서 끊어진
+        // 암호화 채널을 복구한다. Capacitor appState 복귀는 focus를 항상 발생시키지
+        // 않으므로 여기서 전달하되, visibility/appState 중복 이벤트는 합친다.
+        const now = Date.now();
+        if (now - lastSigningTransportResumeRef.current >= 800) {
+          lastSigningTransportResumeRef.current = now;
+          window.dispatchEvent(new Event('focus'));
+        }
         if (statusRef.current === 'connecting') startPoll();
         return;
       }

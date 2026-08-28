@@ -447,35 +447,43 @@ export function GaslessApp() {
 
         setTxStatusMessage(t('txModal.authorizationSign'));
         toast.info(t('txModal.authorizationSign'));
-        const authorizationSignature = await signTypedDataForTx({
-          account: address,
-          ...(signingConnector ? { connector: signingConnector } : {}),
-          domain: {
-            name: tokenDef.authorization.name,
-            version: tokenDef.authorization.version,
-            chainId: targetChainId,
-            verifyingContract: tokenAddress,
+        const authorizationSignature = await signTypedDataForTx(
+          {
+            account: address,
+            ...(signingConnector ? { connector: signingConnector } : {}),
+            domain: {
+              name: tokenDef.authorization.name,
+              version: tokenDef.authorization.version,
+              chainId: targetChainId,
+              verifyingContract: tokenAddress,
+            },
+            types: {
+              TransferWithAuthorization: [
+                { name: 'from', type: 'address' },
+                { name: 'to', type: 'address' },
+                { name: 'value', type: 'uint256' },
+                { name: 'validAfter', type: 'uint256' },
+                { name: 'validBefore', type: 'uint256' },
+                { name: 'nonce', type: 'bytes32' },
+              ],
+            },
+            primaryType: 'TransferWithAuthorization',
+            message: {
+              from: address,
+              to: pendingTransaction.to as `0x${string}`,
+              value: amountUnits,
+              validAfter: BigInt(validAfter),
+              validBefore: BigInt(validBefore),
+              nonce: authorizationNonce,
+            },
           },
-          types: {
-            TransferWithAuthorization: [
-              { name: 'from', type: 'address' },
-              { name: 'to', type: 'address' },
-              { name: 'value', type: 'uint256' },
-              { name: 'validAfter', type: 'uint256' },
-              { name: 'validBefore', type: 'uint256' },
-              { name: 'nonce', type: 'bytes32' },
-            ],
-          },
-          primaryType: 'TransferWithAuthorization',
-          message: {
-            from: address,
-            to: pendingTransaction.to as `0x${string}`,
-            value: amountUnits,
-            validAfter: BigInt(validAfter),
-            validBefore: BigInt(validBefore),
-            nonce: authorizationNonce,
-          },
-        });
+          {
+            onTransportRetry: () => {
+              setTxStatusMessage(t('txModal.signatureRetry'));
+              toast.info(t('txModal.signatureRetry'));
+            },
+          }
+        );
 
         const authorizationPayload: SponsoredTransferRequest = {
           from: address as `0x${string}`,
@@ -619,33 +627,41 @@ export function GaslessApp() {
               /* 설정값 유지 (일부 토큰은 version() 없음) */
             }
           }
-          permitSignature = await signTypedDataForTx({
-            account: address,
-            ...(signingConnector ? { connector: signingConnector } : {}),
-            domain: {
-              name: permitDomainName,
-              version: permitDomainVersion,
-              chainId: targetChainId,
-              verifyingContract: tokenAddress,
+          permitSignature = await signTypedDataForTx(
+            {
+              account: address,
+              ...(signingConnector ? { connector: signingConnector } : {}),
+              domain: {
+                name: permitDomainName,
+                version: permitDomainVersion,
+                chainId: targetChainId,
+                verifyingContract: tokenAddress,
+              },
+              types: {
+                Permit: [
+                  { name: 'owner', type: 'address' },
+                  { name: 'spender', type: 'address' },
+                  { name: 'value', type: 'uint256' },
+                  { name: 'nonce', type: 'uint256' },
+                  { name: 'deadline', type: 'uint256' },
+                ],
+              },
+              primaryType: 'Permit',
+              message: {
+                owner: address,
+                spender: contractAddress,
+                value: amountUnits,
+                nonce: tokenNonce,
+                deadline: BigInt(permitDeadline),
+              },
             },
-            types: {
-              Permit: [
-                { name: 'owner', type: 'address' },
-                { name: 'spender', type: 'address' },
-                { name: 'value', type: 'uint256' },
-                { name: 'nonce', type: 'uint256' },
-                { name: 'deadline', type: 'uint256' },
-              ],
-            },
-            primaryType: 'Permit',
-            message: {
-              owner: address,
-              spender: contractAddress,
-              value: amountUnits,
-              nonce: tokenNonce,
-              deadline: BigInt(permitDeadline),
-            },
-          });
+            {
+              onTransportRetry: () => {
+                setTxStatusMessage(t('txModal.signatureRetry'));
+                toast.info(t('txModal.signatureRetry'));
+              },
+            }
+          );
           deadline = permitDeadline;
           setTxStatusMessage(t('txModal.transferSign'));
           toast.info(t('txModal.transferSign'));
@@ -712,7 +728,13 @@ export function GaslessApp() {
           primaryType: 'Transfer',
           message,
         },
-        { immediateAfterWalletReturn: !!permitSignature || approvalTransactionSent }
+        {
+          immediateAfterWalletReturn: !!permitSignature || approvalTransactionSent,
+          onTransportRetry: () => {
+            setTxStatusMessage(t('txModal.signatureRetry'));
+            toast.info(t('txModal.signatureRetry'));
+          },
+        }
       );
 
       console.log('[handleAdComplete] Signature received:', signature);

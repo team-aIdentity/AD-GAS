@@ -79,6 +79,7 @@
   "txModal.permitSign": "Approve Permit signature (1/2) in MetaMask.",
   "txModal.authorizationSign": "Approve the gasless transfer signature in MetaMask.",
   "txModal.transferSign": "Approve transfer signature (2/2) in MetaMask.",
+  "txModal.signatureRetry": "MetaMask response channel was restored. Approve the same signature once more.",
   "txModal.relayerSending": "Relayer is sending the transaction...",
   "txModal.sendingAmount": "Amount",
   "txModal.gasFree": "Free",
