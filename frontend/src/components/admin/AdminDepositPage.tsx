@@ -12,7 +12,7 @@ import { getWalletClient, getPublicClient } from '@wagmi/core';
 import { config } from '@/wagmi.config';
 import { parseEther, formatEther } from 'viem';
 import { toast } from 'sonner';
-import { injected } from '@wagmi/connectors/injected';
+import { injected } from 'wagmi/connectors';
 import { useLocale } from '@/contexts/LocaleContext';
 
 // Admin 예치 지원 체인

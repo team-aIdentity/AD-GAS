@@ -1,7 +1,6 @@
 import { http, createConfig } from 'wagmi'
 import { base, avalanche, bsc } from 'wagmi/chains'
-import { injected } from '@wagmi/connectors/injected'
-import { metaMask } from '@wagmi/connectors/metaMask'
+import { injected, metaMask } from 'wagmi/connectors'
 import { openMetaMaskDeeplink } from '@/lib/metamaskOpenDeeplink'
 import { giwaSepolia } from '@/lib/chains/giwaSepolia'
 
@@ -27,24 +26,17 @@ export const config = createConfig({
   chains: [base, giwaSepolia, avalanche, bsc],
   connectors: [
     metaMask({
-      dapp: {
+      dappMetadata: {
         name: 'AD GAS',
         url: dappMetadataUrl,
       },
-      // MetaMask Connect의 Mobile Wallet Protocol을 사용한다. 기존
-      // @metamask/sdk relay는 Android chainChanged 누락 시 activeChain이
-      // 이전 체인에 고정될 수 있었다.
-      mobile: {
-        useDeeplink: metamaskUseDeeplink,
-        preferredOpenLink: openMetaMaskDeeplink,
-      },
-      ui: {
-        // Connect SDK는 모바일에서 `preferExtension: false`이면 확장프로그램/QR
-        // 설치 모달을 강제로 표시한다. 기본값(true)을 유지하면 확장프로그램이
-        // 없는 모바일 WebView에서 MWP 딥링크 경로로 바로 진입한다.
-        preferExtension: true,
-        showInstallModal: false,
-      },
+      // 1.0.25에서 Permit 응답이 Android WebView로 정상 복귀하던
+      // MetaMask SDK 커넥터를 사용한다. 앱 실행마다 새 통신 채널을 만들어
+      // 만료된 relay 세션을 재사용하지 않는다.
+      storage: { enabled: false },
+      preferDesktop: false,
+      useDeeplink: metamaskUseDeeplink,
+      openDeeplink: openMetaMaskDeeplink,
     }),
     injected(),
   ],
