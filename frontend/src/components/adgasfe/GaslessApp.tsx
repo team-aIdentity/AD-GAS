@@ -25,7 +25,10 @@ import { TransferSection } from './TransferSection';
 import { AdModal } from './AdModal';
 import { TransactionModal } from './TransactionModal';
 import { TransactionCompleteModal } from './TransactionCompleteModal';
-import { TransactionHistory } from './TransactionHistory';
+import {
+  TransactionHistory,
+  type TransactionHistoryItem,
+} from './TransactionHistory';
 import { MobileHeader } from './mobile/MobileHeader';
 import { WalletConnectModal } from './WalletConnectModal';
 import { MobileNetworkSection } from './mobile/MobileNetworkSection';
@@ -174,6 +177,8 @@ export function GaslessApp() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completedTxHash, setCompletedTxHash] = useState<string | null>(null);
   const [completedTxChainId, setCompletedTxChainId] = useState<SupportedChainId | null>(null);
+  const [recentCompletedTransaction, setRecentCompletedTransaction] =
+    useState<TransactionHistoryItem | null>(null);
   const [selectedToken, setSelectedToken] = useState<Token | null>(() =>
     getDefaultUiToken(DEFAULT_NETWORK.chainId)
   );
@@ -403,6 +408,16 @@ export function GaslessApp() {
       setTxStatusMessage(undefined);
       setCompletedTxHash(txHash);
       setCompletedTxChainId(targetChainId);
+      setRecentCompletedTransaction({
+        hash: txHash,
+        from: address,
+        to: pendingTransaction.to,
+        amount: pendingTransaction.amount,
+        tokenSymbol: pendingTransaction.token.symbol,
+        networkName: pendingTransaction.network.name,
+        chainId: targetChainId,
+        timestamp: Date.now(),
+      });
       setShowCompleteModal(true);
       setRecipientAddress('');
       setAmount('0.0001');
@@ -447,43 +462,35 @@ export function GaslessApp() {
 
         setTxStatusMessage(t('txModal.authorizationSign'));
         toast.info(t('txModal.authorizationSign'));
-        const authorizationSignature = await signTypedDataForTx(
-          {
-            account: address,
-            ...(signingConnector ? { connector: signingConnector } : {}),
-            domain: {
-              name: tokenDef.authorization.name,
-              version: tokenDef.authorization.version,
-              chainId: targetChainId,
-              verifyingContract: tokenAddress,
-            },
-            types: {
-              TransferWithAuthorization: [
-                { name: 'from', type: 'address' },
-                { name: 'to', type: 'address' },
-                { name: 'value', type: 'uint256' },
-                { name: 'validAfter', type: 'uint256' },
-                { name: 'validBefore', type: 'uint256' },
-                { name: 'nonce', type: 'bytes32' },
-              ],
-            },
-            primaryType: 'TransferWithAuthorization',
-            message: {
-              from: address,
-              to: pendingTransaction.to as `0x${string}`,
-              value: amountUnits,
-              validAfter: BigInt(validAfter),
-              validBefore: BigInt(validBefore),
-              nonce: authorizationNonce,
-            },
+        const authorizationSignature = await signTypedDataForTx({
+          account: address,
+          ...(signingConnector ? { connector: signingConnector } : {}),
+          domain: {
+            name: tokenDef.authorization.name,
+            version: tokenDef.authorization.version,
+            chainId: targetChainId,
+            verifyingContract: tokenAddress,
           },
-          {
-            onTransportRetry: () => {
-              setTxStatusMessage(t('txModal.signatureRetry'));
-              toast.info(t('txModal.signatureRetry'));
-            },
-          }
-        );
+          types: {
+            TransferWithAuthorization: [
+              { name: 'from', type: 'address' },
+              { name: 'to', type: 'address' },
+              { name: 'value', type: 'uint256' },
+              { name: 'validAfter', type: 'uint256' },
+              { name: 'validBefore', type: 'uint256' },
+              { name: 'nonce', type: 'bytes32' },
+            ],
+          },
+          primaryType: 'TransferWithAuthorization',
+          message: {
+            from: address,
+            to: pendingTransaction.to as `0x${string}`,
+            value: amountUnits,
+            validAfter: BigInt(validAfter),
+            validBefore: BigInt(validBefore),
+            nonce: authorizationNonce,
+          },
+        });
 
         const authorizationPayload: SponsoredTransferRequest = {
           from: address as `0x${string}`,
@@ -627,41 +634,33 @@ export function GaslessApp() {
               /* 설정값 유지 (일부 토큰은 version() 없음) */
             }
           }
-          permitSignature = await signTypedDataForTx(
-            {
-              account: address,
-              ...(signingConnector ? { connector: signingConnector } : {}),
-              domain: {
-                name: permitDomainName,
-                version: permitDomainVersion,
-                chainId: targetChainId,
-                verifyingContract: tokenAddress,
-              },
-              types: {
-                Permit: [
-                  { name: 'owner', type: 'address' },
-                  { name: 'spender', type: 'address' },
-                  { name: 'value', type: 'uint256' },
-                  { name: 'nonce', type: 'uint256' },
-                  { name: 'deadline', type: 'uint256' },
-                ],
-              },
-              primaryType: 'Permit',
-              message: {
-                owner: address,
-                spender: contractAddress,
-                value: amountUnits,
-                nonce: tokenNonce,
-                deadline: BigInt(permitDeadline),
-              },
+          permitSignature = await signTypedDataForTx({
+            account: address,
+            ...(signingConnector ? { connector: signingConnector } : {}),
+            domain: {
+              name: permitDomainName,
+              version: permitDomainVersion,
+              chainId: targetChainId,
+              verifyingContract: tokenAddress,
             },
-            {
-              onTransportRetry: () => {
-                setTxStatusMessage(t('txModal.signatureRetry'));
-                toast.info(t('txModal.signatureRetry'));
-              },
-            }
-          );
+            types: {
+              Permit: [
+                { name: 'owner', type: 'address' },
+                { name: 'spender', type: 'address' },
+                { name: 'value', type: 'uint256' },
+                { name: 'nonce', type: 'uint256' },
+                { name: 'deadline', type: 'uint256' },
+              ],
+            },
+            primaryType: 'Permit',
+            message: {
+              owner: address,
+              spender: contractAddress,
+              value: amountUnits,
+              nonce: tokenNonce,
+              deadline: BigInt(permitDeadline),
+            },
+          });
           deadline = permitDeadline;
           setTxStatusMessage(t('txModal.transferSign'));
           toast.info(t('txModal.transferSign'));
@@ -730,10 +729,6 @@ export function GaslessApp() {
         },
         {
           immediateAfterWalletReturn: !!permitSignature || approvalTransactionSent,
-          onTransportRetry: () => {
-            setTxStatusMessage(t('txModal.signatureRetry'));
-            toast.info(t('txModal.signatureRetry'));
-          },
         }
       );
 
@@ -1044,6 +1039,11 @@ export function GaslessApp() {
               address={address}
               chainId={selectedNetwork.chainId}
               networkName={selectedNetwork.name}
+              recentTransaction={
+                recentCompletedTransaction?.chainId === selectedNetwork.chainId
+                  ? recentCompletedTransaction
+                  : null
+              }
             />
           )}
         </main>
@@ -1074,6 +1074,12 @@ export function GaslessApp() {
             setShowCompleteModal(false);
             setCompletedTxHash(null);
             setCompletedTxChainId(null);
+          }}
+          onViewHistory={() => {
+            setShowCompleteModal(false);
+            setCompletedTxHash(null);
+            setCompletedTxChainId(null);
+            setActiveTab('transaction');
           }}
         />
         <Toaster />
@@ -1168,6 +1174,11 @@ export function GaslessApp() {
               address={address}
               chainId={selectedNetwork.chainId}
               networkName={selectedNetwork.name}
+              recentTransaction={
+                recentCompletedTransaction?.chainId === selectedNetwork.chainId
+                  ? recentCompletedTransaction
+                  : null
+              }
             />
           )}
         </div>
@@ -1219,6 +1230,12 @@ export function GaslessApp() {
           setShowCompleteModal(false);
           setCompletedTxHash(null);
           setCompletedTxChainId(null);
+        }}
+        onViewHistory={() => {
+          setShowCompleteModal(false);
+          setCompletedTxHash(null);
+          setCompletedTxChainId(null);
+          setActiveTab('transaction');
         }}
       />
       <Toaster />

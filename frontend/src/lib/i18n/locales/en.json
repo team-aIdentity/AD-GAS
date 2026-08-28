@@ -93,6 +93,7 @@
   "completeModal.txHash": "Transaction hash",
   "completeModal.copy": "Copy",
   "completeModal.viewExplorer": "View on explorer",
+  "completeModal.viewHistory": "View transaction history",
   "completeModal.goHome": "Back to home",
   "errors.adIncomplete": "Please watch the ad to the end.",
   "errors.gasLimit": "Daily limit reached. Please try again tomorrow.",

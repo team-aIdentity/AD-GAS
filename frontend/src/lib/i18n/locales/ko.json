@@ -93,6 +93,7 @@
   "completeModal.txHash": "트랜잭션 해시",
   "completeModal.copy": "복사",
   "completeModal.viewExplorer": "스캔에서 확인하기",
+  "completeModal.viewHistory": "앱에서 전송 내역 보기",
   "completeModal.goHome": "메인으로 가기",
   "errors.adIncomplete": "광고를 끝까지 시청해 주세요.",
   "errors.gasLimit": "오늘 한도가 소진되었습니다. 내일 다시 시도해 주세요.",

@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, ExternalLink, Home } from 'lucide-react';
+import { CheckCircle2, ExternalLink, History, Home } from 'lucide-react';
 import { useLocale } from '@/contexts/LocaleContext';
 
 interface TransactionCompleteModalProps {
@@ -8,6 +8,7 @@ interface TransactionCompleteModalProps {
   txHash: string;
   chainId: number;
   onClose: () => void;
+  onViewHistory?: () => void;
 }
 
 function getExplorerUrl(chainId: number, txHash: string): string {
@@ -30,6 +31,7 @@ export function TransactionCompleteModal({
   txHash,
   chainId,
   onClose,
+  onViewHistory,
 }: TransactionCompleteModalProps) {
   const { t } = useLocale();
   const explorerUrl = getExplorerUrl(chainId, txHash);
@@ -38,7 +40,6 @@ export function TransactionCompleteModal({
 
   const handleGoToMain = () => {
     onClose();
-    window.location.reload();
   };
 
   const handleScan = () => {
@@ -90,6 +91,15 @@ export function TransactionCompleteModal({
               <ExternalLink className="size-5" />
               {t('completeModal.viewExplorer')}
             </button>
+            {onViewHistory && (
+              <button
+                onClick={onViewHistory}
+                className="w-full py-3 px-4 rounded-xl bg-[rgba(99,102,241,0.15)] border border-[rgba(99,102,241,0.3)] hover:bg-[rgba(99,102,241,0.22)] transition-all font-bold text-white flex items-center justify-center gap-2"
+              >
+                <History className="size-5" />
+                {t('completeModal.viewHistory')}
+              </button>
+            )}
             <button
               onClick={handleGoToMain}
               className="w-full py-3 px-4 rounded-xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.08)] transition-all font-bold text-white flex items-center justify-center gap-2"

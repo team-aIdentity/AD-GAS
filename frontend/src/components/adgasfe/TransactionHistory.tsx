@@ -20,6 +20,7 @@ interface TransactionHistoryProps {
   address: string;
   chainId: number;
   networkName: string;
+  recentTransaction?: TransactionHistoryItem | null;
 }
 
 function explorerTxUrl(chainId: number, hash: string): string | null {
@@ -59,19 +60,37 @@ function isHistoryItem(value: unknown): value is TransactionHistoryItem {
   );
 }
 
+function mergeHistoryItems(
+  explorerItems: TransactionHistoryItem[],
+  recentTransaction?: TransactionHistoryItem | null
+): TransactionHistoryItem[] {
+  const items = recentTransaction
+    ? [recentTransaction, ...explorerItems]
+    : explorerItems;
+  return Array.from(
+    new Map(items.map(item => [`${item.chainId}:${item.hash.toLowerCase()}`, item])).values()
+  )
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 50);
+}
+
 export function TransactionHistory({
   address,
   chainId,
   networkName,
+  recentTransaction,
 }: TransactionHistoryProps) {
   const { locale, t } = useLocale();
-  const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
+  const [transactions, setTransactions] = useState<TransactionHistoryItem[]>(
+    recentTransaction ? [recentTransaction] : []
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setTransactions(recentTransaction ? [recentTransaction] : []);
     try {
       const query = new URLSearchParams({ address, chainId: String(chainId) });
       const response = await fetch(`${getRelayerApiBase()}/history?${query.toString()}`, {
@@ -79,15 +98,22 @@ export function TransactionHistory({
       });
       if (!response.ok) throw new Error(`History request failed (${response.status})`);
       const body = (await response.json()) as { items?: unknown };
-      setTransactions(Array.isArray(body.items) ? body.items.filter(isHistoryItem) : []);
+      const explorerItems = Array.isArray(body.items)
+        ? body.items.filter(isHistoryItem)
+        : [];
+      setTransactions(mergeHistoryItems(explorerItems, recentTransaction));
     } catch (historyError) {
       console.error('[TransactionHistory] Explorer lookup failed', historyError);
-      setTransactions([]);
-      setError(t('transactionHistoryLoadError'));
+      if (recentTransaction) {
+        setTransactions([recentTransaction]);
+      } else {
+        setTransactions([]);
+        setError(t('transactionHistoryLoadError'));
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [address, chainId, t]);
+  }, [address, chainId, recentTransaction, t]);
 
   useEffect(() => {
     void loadHistory();
@@ -123,7 +149,7 @@ export function TransactionHistory({
           {t('transactionHistoryExplorerNotice')}
         </p>
 
-        {isLoading ? (
+        {isLoading && transactions.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-[#94a3b8]">
             <Loader2 className="size-5 animate-spin" />
             {t('transactionHistoryLoading')}

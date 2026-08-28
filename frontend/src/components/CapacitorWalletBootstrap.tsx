@@ -77,7 +77,6 @@ export function CapacitorWalletBootstrap() {
   const statusRef = useRef(status);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectInFlightRef = useRef(false);
-  const lastSigningTransportResumeRef = useRef(0);
 
   statusRef.current = status;
 
@@ -167,17 +166,10 @@ export function CapacitorWalletBootstrap() {
         !isRecoveringSession
       ) return;
 
-      // Permit 직후 Transfer 서명: reconnect·플래그 해제로 두 번째 팝업 막지 않음
+      // Permit 직후 Transfer 서명: 1.0.25의 동작 방식처럼 진행 중인 SDK 요청을
+      // 건드리지 않는다. 여기서 reconnect/focus를 발생시키면 첫 응답과 두 번째
+      // 요청 사이의 relay 상태가 바뀌어 연속 서명이 멈출 수 있다.
       if (isTxSigningInProgress()) {
-        // MetaMask Connect의 MWP transport는 브라우저 focus 이벤트에서 암호화
-        // 채널을 갱신한다. Capacitor appState 복귀는 focus를 항상 발생시키지 않으므로
-        // 여기서 전달하되, visibility/appState 중복 이벤트는 합친다. 설치 시 적용되는
-        // SDK 보정은 잘못 남은 CONNECTED 상태에서도 reconnect가 실행되게 한다.
-        const now = Date.now();
-        if (now - lastSigningTransportResumeRef.current >= 800) {
-          lastSigningTransportResumeRef.current = now;
-          window.dispatchEvent(new Event('focus'));
-        }
         if (statusRef.current === 'connecting') startPoll();
         return;
       }
